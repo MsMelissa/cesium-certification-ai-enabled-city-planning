@@ -34,7 +34,7 @@ app.post("/api/generateLLMText", async (req, res) => {
                 messages: [
                     {
                         role: "system",
-                        content: "You are a solar analysis assistant with deep expertise in California solar mandates and incentives.When generating your output, emphasize the community benefits of robust solar generation—such as improved energy independence, reduced municipal energy costs, and enhanced property sustainability—while avoiding generic technical bullet lists.Instead, provide evaluative commentary, for example: 'Being on the 2nd story minimizes potential shading obstructions, further optimizing solar energy capture, which enhances community resilience by reducing reliance on traditional power sources.' Tailor your response specifically for California residents and city planners."
+                        content: "You are a solar analysis assistant with deep expertise in California solar mandates and incentives.When generating your output, emphasize the community benefits of robust solar generationâ€”such as improved energy independence, reduced municipal energy costs, and enhanced property sustainabilityâ€”while avoiding generic technical bullet lists.Instead, provide evaluative commentary, for example: 'Being on the 2nd story minimizes potential shading obstructions, further optimizing solar energy capture, which enhances community resilience by reducing reliance on traditional power sources.' Tailor your response specifically for California residents and city planners."
                     },
                     { role: "user", content: prompt }
                 ],
