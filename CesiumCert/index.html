@@ -189,23 +189,25 @@
 
     <!-- Main JavaScript Code -->
     <script type="module">
-    /*************************************************
-             * 0) Fetch Public API Config from the Server
-             *************************************************/
+        /*************************************************
+     * 0) Fetch Public API Config from the Server
+     *************************************************/
+
         // Keep your Cesium Ion key in the client
         Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5MGM5NmY1Mi00OTcwLTQ2NDctYWYwOC0xNGM3YTFlZmQzZjgiLCJpZCI6MjMwMDE2LCJpYXQiOjE3MzY2MzU1ODZ9.zbfWIKXddKs4vm5an-xtwsli8fxIIEH0m0TA65S9b_k";
 
         // Fetch public configuration (Cesium, NREL, and OpenWeatherMap keys) from your backend.
-        fetch('http://127.0.0.1:3000/api/config')
-            .then(response => response.json())
-            .then(config => {
+        fetch("/api/config")
+            .then((response) => response.json())
+            .then((config) => {
                 // Store public keys globally for later use in API calls.
                 window.NREL_API_KEY = config.NREL_API_KEY;
                 window.OPENWEATHER_API_KEY = config.OPENWEATHER_API_KEY;
-                // After keys are set, initialize analysis (if desired).
+
+                // Once keys are loaded, initialize or update your analysis.
                 updateAnalysisPanel();
             })
-            .catch(error => console.error("Error fetching config:", error));
+            .catch((error) => console.error("Error fetching config:", error));
 
         /*************************************************
          * 1) Cesium Initialization
