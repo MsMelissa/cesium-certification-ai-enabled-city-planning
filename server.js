@@ -1,24 +1,31 @@
 // Import dependencies
 const express = require("express");
-const path = require('path');
-const app = express();
+const path = require("path");
 const cors = require("cors");
 require("dotenv").config();
+
+// Create the Express app instance
+const app = express();
+const PORT = process.env.PORT || 3000;
 
 // Retrieve API keys from .env
 const openaiKey = process.env.OPENAI_API_KEY;
 const nrelApiKey = process.env.NREL_API_KEY;
 const openWeatherApiKey = process.env.OPENWEATHER_API_KEY;
 
-// Create the Express app instance
-const app = express();
-const port = 3000;
-
 // Enable CORS for all routes
 app.use(cors({ origin: "*" }));
 
 // Parse JSON request bodies
 app.use(express.json());
+
+// Serve static files from the "CesiumCert" folder (this should contain your index.html)
+app.use(express.static(path.join(__dirname, "CesiumCert")));
+
+// Define the root route to serve index.html
+app.get("/", (req, res) => {
+    res.sendFile(path.join(__dirname, "CesiumCert", "index.html"));
+});
 
 // Define the endpoint to generate LLM text using the OpenAI API
 app.post("/api/generateLLMText", async (req, res) => {
@@ -36,7 +43,7 @@ app.post("/api/generateLLMText", async (req, res) => {
                 messages: [
                     {
                         role: "system",
-                        content: "You are a solar analysis assistant with deep expertise in California solar mandates and incentives.When generating your output, emphasize the community benefits of robust solar generation—such as improved energy independence, reduced municipal energy costs, and enhanced property sustainability—while avoiding generic technical bullet lists.Instead, provide evaluative commentary, for example: 'Being on the 2nd story minimizes potential shading obstructions, further optimizing solar energy capture, which enhances community resilience by reducing reliance on traditional power sources.' Tailor your response specifically for California residents and city planners."
+                        content: "You are a solar analysis assistant with deep expertise in California solar mandates and incentives. When generating your output, emphasize the community benefits of robust solar generation—such as improved energy independence, reduced municipal energy costs, and enhanced property sustainability—while avoiding generic technical bullet lists. Instead, provide evaluative commentary, for example: 'Being on the 2nd story minimizes potential shading obstructions, further optimizing solar energy capture, which enhances community resilience by reducing reliance on traditional power sources.' Tailor your response specifically for California residents and city planners."
                     },
                     { role: "user", content: prompt }
                 ],
@@ -65,6 +72,5 @@ app.get("/api/config", (req, res) => {
     });
 });
 
-// Start the server on port 3000 (or process.env.PORT if defined)
-const PORT = process.env.PORT || 3000;
+// Start the server
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
