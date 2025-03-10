@@ -109,19 +109,22 @@
     <!-- Cesium 3D Viewer Container -->
     <div id="cesiumContainer"></div>
 
-    <!-- UI Controls (in one row) in the requested order -->
+    <!-- UI Controls (in one row) -->
     <div id="controlsContainer">
         <!-- Inline Logo Container -->
         <div id="logoContainer"></div>
 
-        <!-- Building Status Selection -->
+        <!-- Building Status Selection (Dropdown) -->
         <div id="buildingStatusContainer">
             <strong>Select Building Status:</strong><br />
-            <label><input type="radio" name="buildingStatus" value="Conceptual Review"> Conceptual Review</label><br />
-            <label><input type="radio" name="buildingStatus" value="Applications in Process"> Applications in Process</label><br />
-            <label><input type="radio" name="buildingStatus" value="Approved"> Approved</label><br />
-            <label><input type="radio" name="buildingStatus" value="Construction Plans Review"> Construction Plans Review</label><br />
-            <label><input type="radio" name="buildingStatus" value="Under Construction"> Under Construction</label><br />
+            <select id="buildingStatusSelect">
+                <option value="">-- Select Status --</option>
+                <option value="Conceptual Review">Conceptual Review</option>
+                <option value="Applications in Process">Applications in Process</option>
+                <option value="Approved">Approved</option>
+                <option value="Construction Plans Review">Construction Plans Review</option>
+                <option value="Under Construction">Under Construction</option>
+            </select>
         </div>
 
         <!-- Building Selection (populated dynamically based on status) -->
@@ -162,18 +165,7 @@
             </select>
         </div>
 
-        <!-- Shading Dropdown -->
-        <div id="shadingContainer">
-            <strong>Shade:</strong><br />
-            <select id="shadingSelect">
-                <option value="NONE">NONE</option>
-                <option value="LIGHT">LIGHT</option>
-                <option value="MEDIUM">MEDIUM</option>
-                <option value="HEAVY">HEAVY</option>
-            </select>
-        </div>
-
-        <!-- Sun Hour (Time Slider) -->
+        <!-- Time Slider -->
         <div id="timeSliderContainer">
             <strong>Sun Hour (PST):</strong> <span id="hourDisplay">12</span><br />
             <input type="range" id="timeSlider" min="8" max="20" step="1" value="12" />
@@ -192,12 +184,12 @@
         </div>
     </div>
 
-    <!-- Main JavaScript Code -->
     <script type="module">
         /*************************************************
-         * 0) Fetch Public API Config from the Server (Production)
+         * 0) Fetch Public API Config from the Server
          *************************************************/
         Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5MGM5NmY1Mi00OTcwLTQ2NDctYWYwOC0xNGM3YTFlZmQzZjgiLCJpZCI6MjMwMDE2LCJpYXQiOjE3MzY2MzU1ODZ9.zbfWIKXddKs4vm5an-xtwsli8fxIIEH0m0TA65S9b_k";
+
         fetch("/api/config")
             .then(response => response.json())
             .then(config => {
@@ -216,13 +208,15 @@
             timeline: false,
             animation: false,
         });
+
+        // Load OSM Buildings (optional)
         (async () => {
             const osmBuildings = await Cesium.createOsmBuildingsAsync();
             viewer.scene.primitives.add(osmBuildings);
         })();
 
         /*************************************************
-         * 2) Load the Pea Soup Building Tileset
+         * 2) Load the Pea Soup Building Tileset & Bird's-Eye Camera
          *************************************************/
         const PEA_SOUP_ASSET_ID = 3114933;
         let buildingTileset, buildingBoundingSphere;
@@ -231,16 +225,32 @@
             viewer.scene.primitives.add(buildingTileset);
             await buildingTileset.readyPromise;
             buildingBoundingSphere = Cesium.BoundingSphere.clone(buildingTileset.boundingSphere);
-            // (Note: removed initial flyTo so that we can start with a birds–eye view)
+            // Do not automatically fly to the tileset; we'll use a bird’s-eye view instead.
+            flyToBirdsEye();
         })();
 
+        // Bird’s-Eye Camera on Load (800 ft ~ 244 m)
+        function flyToBirdsEye() {
+            const destination = Cesium.Cartesian3.fromDegrees(
+                -120.19107926363813,
+                34.612499527190124,
+                244
+            );
+            viewer.camera.flyTo({
+                destination: destination,
+                orientation: {
+                    heading: Cesium.Math.toRadians(0),
+                    pitch: Cesium.Math.toRadians(-90),
+                    roll: 0,
+                },
+                duration: 2,
+            });
+        }
+
         /*************************************************
-         * 3) Define Building Placeholders Using Geometry and Appearances
-         *
-         * Each building is defined with its name, status, color,
-         * custom dimensions (width, depth, height) for non-tileset assets and explicit coordinates.
-         * The PeaSoup asset (already built) replaces the two conceptual review placeholders.
+         * 3) Define Building Placeholders & Building Status UI
          *************************************************/
+        // Define your building placeholders.
         const buildingPlaceholders = [
             // Conceptual Review – Pea Soup asset
             {
@@ -371,75 +381,137 @@
             }
         ];
 
-        // Map building names to their positions and label entities.
+        // Map to store building positions and flags.
         const buildingPositions = {};
-        // Generic function to create a building primitive using Cesium’s Geometry and Appearance.
-        function createBuildingPrimitive(building, position) {
-            const dimensions = building.dimensions || new Cesium.Cartesian3(50, 50, 100);
+
+        // Function to create geometry for non-tileset placeholders.
+        function createPlaceholderPrimitive(building, position) {
+            const dims = building.dimensions || new Cesium.Cartesian3(50, 50, 100);
             const boxGeometry = new Cesium.BoxGeometry({
                 vertexFormat: Cesium.MaterialAppearance.VERTEX_FORMAT,
-                dimensions: dimensions
+                dimensions: dims,
             });
             const instance = new Cesium.GeometryInstance({
                 geometry: boxGeometry,
                 modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(position),
-                id: building.name
+                id: building.name,
             });
             const primitive = new Cesium.Primitive({
                 geometryInstances: instance,
                 appearance: new Cesium.MaterialAppearance({
                     material: Cesium.Material.fromType("Color", {
-                        color: Cesium.Color.fromCssColorString(building.color).withAlpha(0.7)
+                        color: Cesium.Color.fromCssColorString(building.color).withAlpha(0.7),
                     }),
                     translucent: true,
-                    closed: true
-                })
+                    closed: true,
+                }),
             });
             viewer.primitives.add(primitive);
         }
-        // Loop through each building placeholder to create its primitive and add a label.
-        buildingPlaceholders.forEach((building, index) => {
-            let position;
-            if (building.coordinates) {
-                position = Cesium.Cartesian3.fromDegrees(
-                    building.coordinates.lon,
-                    building.coordinates.lat,
-                    building.coordinates.height || 0
-                );
+
+        // Create placeholders and labels.
+        buildingPlaceholders.forEach((bld) => {
+            if (bld.isTileset) {
+                // For tileset buildings, no geometry is created.
+                buildingPositions[bld.name] = { isTileset: true };
             } else {
-                position = getBuildingPosition(index, buildingPlaceholders.length);
+                const pos = Cesium.Cartesian3.fromDegrees(
+                    bld.coordinates.lon,
+                    bld.coordinates.lat,
+                    bld.coordinates.height || 0
+                );
+                createPlaceholderPrimitive(bld, pos);
+                buildingPositions[bld.name] = { position: pos, isTileset: false };
+                // Add label entity.
+                viewer.entities.add({
+                    name: bld.name,
+                    position: pos,
+                    label: {
+                        text: bld.name,
+                        font: "14pt sans-serif",
+                        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                        outlineWidth: 2,
+                        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                        pixelOffset: new Cesium.Cartesian2(0, -20),
+                    },
+                });
             }
-            // For non-tileset buildings, create a geometry primitive.
-            if (!building.isTileset) {
-                createBuildingPrimitive(building, position);
-            }
-            // Add a label entity for selection.
-            const entity = viewer.entities.add({
-                name: building.name,
-                position: position,
-                label: {
-                    text: building.name,
-                    font: "14pt sans-serif",
-                    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                    outlineWidth: 2,
-                    verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                    pixelOffset: new Cesium.Cartesian2(0, -20)
-                }
-            });
-            buildingPositions[building.name] = { entity, position, isTileset: building.isTileset || false };
         });
-        // Fallback function if custom coordinates aren’t provided.
-        function getBuildingPosition(index, total) {
-            const centerLat = 34.61346;
-            const centerLon = -120.1918;
-            const radiusDegrees = 0.0045;
-            const angle = (2 * Math.PI * index) / total;
-            const lat = centerLat + radiusDegrees * Math.sin(angle);
-            const lon = centerLon + radiusDegrees * Math.cos(angle);
-            return Cesium.Cartesian3.fromDegrees(lon, lat, 0);
+
+        // Building Status Dropdown event
+        const buildingStatusSelect = document.getElementById("buildingStatusSelect");
+        buildingStatusSelect.addEventListener("change", updateBuildingSelectionUI);
+
+        function updateBuildingSelectionUI() {
+            const selectedStatus = buildingStatusSelect.value;
+            const container = document.getElementById("buildingSelectionContainer");
+            const filtered = buildingPlaceholders.filter(b => b.status === selectedStatus);
+            if (!filtered.length) {
+                container.innerHTML = "<strong>Select Building:</strong><br/>No buildings found.";
+                return;
+            }
+            let html = "<strong>Select Building:</strong><br/>";
+            filtered.forEach(b => {
+                html += `<label><input type="radio" name="buildingSelection" value="${b.name}"> ${b.name}</label><br/>`;
+            });
+            container.innerHTML = html;
+
+            // Attach event listeners to building radio buttons.
+            const buildingRadios = container.querySelectorAll('input[name="buildingSelection"]');
+            buildingRadios.forEach(r => {
+                r.addEventListener("change", () => {
+                    const bName = r.value;
+                    currentBuilding = buildingPositions[bName];
+                    flyToSelectedBuilding();
+                });
+            });
         }
-        // Global variable to store the currently selected building.
+
         let currentBuilding = null;
+
+        function flyToSelectedBuilding() {
+            if (!currentBuilding) {
+                flyToBirdsEye();
+                return;
+            }
+            if (currentBuilding.isTileset) {
+                if (buildingBoundingSphere) {
+                    viewer.camera.flyToBoundingSphere(buildingBoundingSphere, { duration: 2 });
+                }
+                return;
+            }
+            const orientation = orientationSelect.value;
+            const buildingLevel = buildingLevelSelect.value;
+            const LEVEL_ALTITUDES_FEET = {
+                "Ground": 0,
+                "2nd Story": 27.0833,
+                "4th Floor": 52.25,
+                "Birds_Eye": 100,
+            };
+            const feetToMeters = (ft) => ft * 0.3048;
+            const pos = Cesium.Cartesian3.clone(currentBuilding.position);
+            const carto = Cesium.Ellipsoid.WGS84.cartesianToCartographic(pos);
+            carto.height += feetToMeters(LEVEL_ALTITUDES_FEET[buildingLevel] || 0);
+            const newPos = Cesium.Ellipsoid.WGS84.cartographicToCartesian(carto);
+
+            const ORIENTATION_HEADING = {
+                "NORTH": Cesium.Math.toRadians(0),
+                "SOUTH": Cesium.Math.toRadians(180),
+                "EAST": Cesium.Math.toRadians(90),
+                "WEST": Cesium.Math.toRadians(270),
+                "BIRDSEYE": Cesium.Math.toRadians(0),
+            };
+            let pitch = 0;
+            if (orientation === "BIRDSEYE") {
+                pitch = Cesium.Math.toRadians(-90);
+            }
+            const heading = ORIENTATION_HEADING[orientation] || 0;
+            viewer.camera.flyTo({
+                destination: newPos,
+                orientation: { heading, pitch, roll: 0 },
+                duration: 2,
+            });
+        }
 
         /*************************************************
          * 4) Season & Time Setup
@@ -448,10 +520,11 @@
             Winter: "2021-01-14",
             Spring: "2021-04-14",
             Summer: "2021-07-14",
-            Fall: "2021-10-14"
+            Fall: "2021-10-14",
         };
         let currentSeason = "Winter";
         let currentDateStr = SEASON_DATES[currentSeason];
+
         function setClockBoundsForDate(dateStr) {
             const start = new Date(`${dateStr}T08:00:00-08:00`);
             const stop = new Date(`${dateStr}T20:00:00-08:00`);
@@ -463,6 +536,7 @@
             viewer.clock.clockRange = Cesium.ClockRange.CLAMPED;
             viewer.clock.shouldAnimate = false;
         }
+
         function setClockToPST(dateStr, hourPST) {
             const dateString = `${dateStr}T${hourPST.toString().padStart(2, "0")}:00:00-08:00`;
             const newDate = new Date(dateString);
@@ -476,7 +550,7 @@
             "Ground": 0,
             "2nd Story": 27.0833,
             "4th Floor": 52.25,
-            "Birds_Eye": 100
+            "Birds_Eye": 100,
         };
         function feetToMeters(ft) {
             return ft * 0.3048;
@@ -486,7 +560,7 @@
             "SOUTH": Cesium.Math.toRadians(180),
             "EAST": Cesium.Math.toRadians(90),
             "WEST": Cesium.Math.toRadians(270),
-            "BIRDSEYE": Cesium.Math.toRadians(0)
+            "BIRDSEYE": Cesium.Math.toRadians(0),
         };
 
         /*************************************************
@@ -508,6 +582,7 @@
                 console.error("Error fetching NREL data:", err);
                 return null;
             }
+
             let monthIndex;
             switch (season) {
                 case "Winter": monthIndex = 0; break;
@@ -518,6 +593,7 @@
             }
             const monthlyKwh = nrelData.outputs?.ac_monthly ? nrelData.outputs.ac_monthly[monthIndex] : 120;
             const solrad = nrelData.outputs?.solrad || 5.5;
+
             const openWeatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${window.OPENWEATHER_API_KEY}&units=metric`;
             let weatherData;
             try {
@@ -531,11 +607,13 @@
                 console.error("Error fetching OpenWeatherMap data:", err);
                 return null;
             }
+
             const temperature = weatherData.main?.temp ?? 20;
             let climate = "MILD";
             if (temperature > 25) climate = "HOT";
             else if (temperature < 15) climate = "COLD";
-            const energyCost = 0.1990;
+
+            const energyCost = 0.1990; // USD/kWh
             return { monthlyKwh, solrad, climate, energyCost };
         }
 
@@ -547,7 +625,7 @@
                 const response = await fetch("/api/generateLLMText", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ prompt })
+                    body: JSON.stringify({ prompt }),
                 });
                 const data = await response.json();
                 if (data.text) {
@@ -561,38 +639,56 @@
                 return "Error generating text.";
             }
         }
+
         async function updateAnalysisPanel() {
             const season = currentSeason;
             const hour = parseInt(timeSlider.value, 10);
             const orientation = orientationSelect.value;
             const buildingLevel = buildingLevelSelect.value;
+
+            // Derive shading from building level using mapping.
             const LEVEL_SHADE_MAPPING = {
                 "Birds_Eye": "NONE",
                 "4th Floor": "LIGHT",
                 "2nd Story": "MEDIUM",
-                "Ground": "HEAVY"
+                "Ground": "HEAVY",
             };
-            const shading = shadingSelect.value || LEVEL_SHADE_MAPPING[buildingLevel] || "NONE";
-            const levelElevation = {
+            const shading = LEVEL_SHADE_MAPPING[buildingLevel] || "NONE";
+
+            const LEVEL_ELEVATIONS = {
                 "Ground": "0 ft",
                 "2nd Story": "27 ft, 1 in",
                 "4th Floor": "52 ft, 3 in",
-                "Birds_Eye": "N/A"
-            }[buildingLevel] || "";
+                "Birds_Eye": "N/A",
+            };
+            const levelElevation = LEVEL_ELEVATIONS[buildingLevel] || "";
+
             setClockBoundsForDate(currentDateStr);
             setClockToPST(currentDateStr, hour);
             hourDisplay.textContent = hour;
+
             const data = await fetchAnalysisData(season, hour, orientation);
             if (!data) return;
             let { solrad, climate, energyCost, monthlyKwh } = data;
+
             const LEVEL_MULTIPLIERS = {
                 "Ground": 1.0,
                 "2nd Story": 1.05,
-                "4th Floor": 1.10,
-                "Birds_Eye": 1.20,
+                "4th Floor": 1.1,
+                "Birds_Eye": 1.2,
             };
             solrad *= LEVEL_MULTIPLIERS[buildingLevel];
+
+            const SHADING_ADJUSTMENTS = {
+                "NONE": 1.0,
+                "LIGHT": 0.9,
+                "MEDIUM": 0.8,
+                "HEAVY": 0.5,
+            };
+            solrad *= SHADING_ADJUSTMENTS[shading];
+
             const helioViewsScore = solrad * 2;
+
             const summaryPrompt = `
 PROPERTY DETAILS:
 • Address: Buellton, CA (lat: 34.61346, lon: -120.1918)
@@ -613,13 +709,13 @@ TASK:
 Final Output Format:
 <h3>Highlights</h3>
 <ul>
-          <li>Bullet points…</li>
+      <li>Bullet points…</li>
 </ul>
 <h3>Cautions</h3>
 <ul>
-          <li>Bullet points…</li>
+      <li>Bullet points…</li>
 </ul>
-                            `;
+          `;
             const llmText = await generateLLMText(summaryPrompt) || "";
             const highlightsRegex = /<h3>Highlights<\/h3>[\s\S]*?(?=<h3>Cautions<\/h3>)/;
             const cautionsRegex = /<h3>Cautions<\/h3>[\s\S]*/;
@@ -630,25 +726,26 @@ Final Output Format:
             if (highlightsMatch) highlightsHTML = highlightsMatch[0].trim();
             if (cautionsMatch) cautionsHTML = cautionsMatch[0].trim();
             analysisResults.innerHTML = `
-                    <div id="analysisResultsTop">
-                      <h3>Est. HelioViews Score: <b>${helioViewsScore.toFixed(1)}</b></h3>
-                      <div><strong>Base Solar Potential:</strong> ${solrad.toFixed(2)} kWh/m²/day</div>
-                      <div><strong>Climate Adjustment:</strong> ${climate}</div>
-                      <div><strong>Shade:</strong> ${shading}</div>
-                    </div>
-                    <div id="analysisColumns">
-                      <div class="analysis-col highlights-col">
-                        ${highlightsHTML}
-                      </div>
-                      <div class="analysis-col cautions-col">
-                        ${cautionsHTML}
-                      </div>
-                    </div>
-                  `;
+            <div id="analysisResultsTop">
+              <h3>Est. HelioViews Score: <b>${helioViewsScore.toFixed(1)}</b></h3>
+              <div><strong>Base Solar Potential:</strong> ${solrad.toFixed(2)} kWh/m²/day</div>
+              <div><strong>Climate Adjustment:</strong> ${climate}</div>
+              <div><strong>Elevation Height:</strong> ${levelElevation}</div>
+              <div><strong>Shade:</strong> ${shading}</div>
+            </div>
+            <div id="analysisColumns">
+              <div class="analysis-col highlights-col">
+                ${highlightsHTML}
+              </div>
+              <div class="analysis-col cautions-col">
+                ${cautionsHTML}
+              </div>
+            </div>
+          `;
         }
 
         /*************************************************
-         * 8) UI Event Listeners
+         * 8) Event Listeners
          *************************************************/
         const seasonRadios = document.querySelectorAll('input[name="season"]');
         seasonRadios.forEach(radio => {
@@ -673,92 +770,13 @@ Final Output Format:
             }
             updateAnalysisPanel();
         });
-        shadingSelect.addEventListener("change", updateAnalysisPanel);
-        // Building Status selection – update the Building selection UI dynamically.
-        const buildingStatusRadios = document.querySelectorAll('input[name="buildingStatus"]');
-        buildingStatusRadios.forEach(radio => {
-            radio.addEventListener("change", updateBuildingSelectionUI);
-        });
-        function updateBuildingSelectionUI() {
-            const selectedStatus = document.querySelector('input[name="buildingStatus"]:checked').value;
-            const container = document.getElementById("buildingSelectionContainer");
-            const filteredBuildings = buildingPlaceholders.filter(b => b.status === selectedStatus);
-            let html = "<strong>Select Building:</strong><br/>";
-            filteredBuildings.forEach((b) => {
-                html += `<label><input type="radio" name="buildingSelection" value="${b.name}"> ${b.name}</label><br/>`;
-            });
-            container.innerHTML = html;
-            // Add event listeners for the dynamically created building radio buttons.
-            const buildingRadios = container.querySelectorAll('input[name="buildingSelection"]');
-            buildingRadios.forEach(radio => {
-                radio.addEventListener("change", () => {
-                    const buildingName = radio.value;
-                    currentBuilding = buildingPositions[buildingName];
-                    flyToSelectedBuilding();
-                });
-            });
-        }
 
         /*************************************************
-         * 9) Camera Fly-To Functions
-         *************************************************/
-        // Initial birds–eye view of all Buellton.
-        function flyToBirdsEye() {
-            const destination = Cesium.Cartesian3.fromDegrees(-120.1918, 34.61346, 3000);
-            viewer.camera.flyTo({
-                destination: destination,
-                orientation: {
-                    heading: Cesium.Math.toRadians(0),
-                    pitch: Cesium.Math.toRadians(-90),
-                    roll: 0
-                },
-                duration: 2
-            });
-        }
-        // Fly to the currently selected building.
-        function flyToSelectedBuilding() {
-            if (!currentBuilding) {
-                flyToBirdsEye();
-                return;
-            }
-            // If the selected building is the tileset (PeaSoup), fly to its bounding sphere.
-            if (currentBuilding.isTileset) {
-                if (buildingBoundingSphere) {
-                    viewer.camera.flyToBoundingSphere(buildingBoundingSphere, { duration: 2 });
-                }
-                return;
-            }
-            const orientation = orientationSelect.value;
-            const buildingLevel = buildingLevelSelect.value;
-            const levelFeet = LEVEL_ALTITUDES_FEET[buildingLevel] || 0;
-            const levelMeters = feetToMeters(levelFeet);
-            const pos = currentBuilding.position;
-            const carto = Cesium.Ellipsoid.WGS84.cartesianToCartographic(pos);
-            carto.height += levelMeters;
-            const newPos = Cesium.Ellipsoid.WGS84.cartographicToCartesian(carto);
-            let pitch = 0;
-            if (orientation === "BIRDSEYE") {
-                pitch = Cesium.Math.toRadians(-90);
-            }
-            const heading = ORIENTATION_HEADING[orientation] || 0;
-            viewer.camera.flyTo({
-                destination: newPos,
-                orientation: {
-                    heading: heading,
-                    pitch: pitch,
-                    roll: 0
-                },
-                duration: 2
-            });
-        }
-
-        /*************************************************
-         * 10) Initial Setup
+         * 9) Initial Setup
          *************************************************/
         setClockBoundsForDate(currentDateStr);
         setClockToPST(currentDateStr, parseInt(timeSlider.value, 10));
         updateAnalysisPanel();
-        flyToBirdsEye();
     </script>
 </body>
 </html>
