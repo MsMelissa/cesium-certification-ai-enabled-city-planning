@@ -1,4 +1,7 @@
-﻿<!DOCTYPE html>
+﻿//THIS IS THE CURRENT DEPLOPYED VERSION OF THE BUELLTON HELIOVIEWS APP
+// SAVE ME AND REPLACE INDEX.HTML WITH ME IF ALL GOES TO SHIT
+
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
@@ -112,7 +115,7 @@
             font-size: 0.9em;
             line-height: 1.4;
         }
-        /* Simple styling for dropdowns and range inputs */
+        /* Simple styling for dropdowns */
         select, input[type="range"] {
             margin: 5px 0;
             padding: 4px;
@@ -129,27 +132,6 @@
         <!-- Inline Logo Container -->
         <div id="logoContainer"></div>
 
-        <!-- Building Status Dropdown -->
-        <div>
-            <strong>Select Building Status:</strong><br />
-            <select id="buildingStatusSelect">
-                <option value="">-- Select Status --</option>
-                <option value="Conceptual Review">Conceptual Review</option>
-                <option value="Applications in Process">Applications in Process</option>
-                <option value="Approved">Approved</option>
-                <option value="Construction Plans Review">Construction Plans Review</option>
-                <option value="Under Construction">Under Construction</option>
-            </select>
-        </div>
-
-        <!-- Building Dropdown (populated dynamically) -->
-        <div>
-            <strong>Select Building:</strong><br />
-            <select id="buildingSelect">
-                <option value="">-- No Buildings --</option>
-            </select>
-        </div>
-
         <!-- Season Selection -->
         <div id="seasonContainer">
             <strong>Select Season:</strong><br />
@@ -158,13 +140,11 @@
             <label><input type="radio" name="season" value="Summer"> Summer</label><br />
             <label><input type="radio" name="season" value="Fall"> Fall</label><br />
         </div>
-
         <!-- Time Slider -->
         <div id="timeSliderContainer">
             <strong>Sun Hour (PST):</strong> <span id="hourDisplay">12</span><br />
             <input type="range" id="timeSlider" min="8" max="20" step="1" value="12" />
         </div>
-
         <!-- Orientation Dropdown -->
         <div id="orientationContainer">
             <strong>Select Orientation:</strong><br />
@@ -176,7 +156,6 @@
                 <option value="BIRDSEYE">BIRDSEYE</option>
             </select>
         </div>
-
         <!-- Building Level Dropdown -->
         <div id="buildingLevelContainer">
             <strong>Select Building Level:</strong><br />
@@ -185,6 +164,16 @@
                 <option value="2nd Story">2nd Story</option>
                 <option value="4th Floor">4th Floor</option>
                 <option value="Birds_Eye">Birds Eye</option>
+            </select>
+        </div>
+        <!-- Shading Dropdown -->
+        <div id="shadingContainer">
+            <strong>Shade:</strong><br />
+            <select id="shadingSelect">
+                <option value="NONE">NONE</option>
+                <option value="LIGHT">LIGHT</option>
+                <option value="MEDIUM">MEDIUM</option>
+                <option value="HEAVY">HEAVY</option>
             </select>
         </div>
     </div>
@@ -204,15 +193,21 @@
     <!-- Main JavaScript Code -->
     <script type="module">
         /*************************************************
-         * 0) Fetch Public API Config from the Server
-         *************************************************/
+     * 0) Fetch Public API Config from the Server
+     *************************************************/
+
+        // Keep your Cesium Ion key in the client
         Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5MGM5NmY1Mi00OTcwLTQ2NDctYWYwOC0xNGM3YTFlZmQzZjgiLCJpZCI6MjMwMDE2LCJpYXQiOjE3MzY2MzU1ODZ9.zbfWIKXddKs4vm5an-xtwsli8fxIIEH0m0TA65S9b_k";
 
+        // Fetch public configuration (Cesium, NREL, and OpenWeatherMap keys) from your backend.
         fetch("/api/config")
             .then((response) => response.json())
             .then((config) => {
+                // Store public keys globally for later use in API calls.
                 window.NREL_API_KEY = config.NREL_API_KEY;
                 window.OPENWEATHER_API_KEY = config.OPENWEATHER_API_KEY;
+
+                // Once keys are loaded, initialize or update your analysis.
                 updateAnalysisPanel();
             })
             .catch((error) => console.error("Error fetching config:", error));
@@ -234,21 +229,22 @@
         })();
 
         /*************************************************
-         * 2) PeaSoup Building Tileset
+         * 2) Load the Pea Soup Building Tileset
          *************************************************/
         const PEA_SOUP_ASSET_ID = 3114933;
         let buildingTileset, buildingBoundingSphere;
+
         (async () => {
             buildingTileset = await Cesium.Cesium3DTileset.fromIonAssetId(PEA_SOUP_ASSET_ID);
             viewer.scene.primitives.add(buildingTileset);
             await buildingTileset.readyPromise;
             buildingBoundingSphere = Cesium.BoundingSphere.clone(buildingTileset.boundingSphere);
-            // Old code: On load, immediately fly to PeaSoup bounding sphere
+            // Initial camera fly-to for the building.
             viewer.camera.flyToBoundingSphere(buildingBoundingSphere, { duration: 2 });
         })();
 
         /*************************************************
-         * 3) Season & Time Setup (from original code)
+         * 3) Season & Time Setup
          *************************************************/
         const SEASON_DATES = {
             Winter: "2021-01-14",
@@ -279,274 +275,102 @@
         }
 
         /*************************************************
-         * 4) Building Level & Orientation (original code)
+         * 4) Building Level & Orientation Setup
          *************************************************/
+        // Feet above the building's base for each level.
         const LEVEL_ALTITUDES_FEET = {
             "Ground": 0,
-            "2nd Story": 27.0833,
-            "4th Floor": 52.25,
-            "Birds_Eye": 100
+            "2nd Story": 27.0833,  // 27 ft 1 in
+            "4th Floor": 52.25,    // 52 ft 3 in
+            "Birds_Eye": 100       // arbitrary for birds-eye view
         };
 
         function feetToMeters(ft) {
             return ft * 0.3048;
         }
 
+        // For cardinal directions, use pitch = 0 (horizontal view). For BIRDSEYE, pitch = -90.
+        // Heading: 0° = NORTH, 180° = SOUTH, 90° = EAST, 270° = WEST.
         const ORIENTATION_HEADING = {
             "NORTH": Cesium.Math.toRadians(0),
             "SOUTH": Cesium.Math.toRadians(180),
             "EAST": Cesium.Math.toRadians(90),
             "WEST": Cesium.Math.toRadians(270),
-            "BIRDSEYE": Cesium.Math.toRadians(0)
+            "BIRDSEYE": Cesium.Math.toRadians(0)  // heading ignored when pitch = -90
         };
 
-        /*************************************************
-         * 5) Building Placeholders
-         *************************************************/
-        const buildingPlaceholders = [
-            // Conceptual Review – Pea Soup asset
-            {
-                name: "PeaSoup",
-                status: "Conceptual Review",
-                color: "pink",
-                coordinates: { lon: -120.1918, lat: 34.61346, height: 0 },
-                isTileset: true
-            },
-            // Applications in Process – 3 placeholders
-            {
-                name: "Hwy 246 Commercial Center",
-                status: "Applications in Process",
-                color: "#FFDAB9",
-                dimensions: new Cesium.Cartesian3(30, 30, 12),
-                coordinates: { lon: -120.19312, lat: 34.61305, height: 0 }
-            },
-            {
-                name: "Arco AM-PM Gas Station",
-                status: "Applications in Process",
-                color: "#FFDAB9",
-                dimensions: new Cesium.Cartesian3(26, 26, 4),
-                coordinates: { lon: -120.19042, lat: 34.61970, height: 0 }
-            },
-            {
-                name: "BUE-17 Specific Plan (Campus 36)",
-                status: "Applications in Process",
-                color: "#FFDAB9",
-                dimensions: new Cesium.Cartesian3(64, 64, 12),
-                coordinates: { lon: -120.20182, lat: 34.60883, height: 0 }
-            },
-            // Approved – 2 placeholders
-            {
-                name: "The 518",
-                status: "Approved",
-                color: "lightgreen",
-                dimensions: new Cesium.Cartesian3(27, 27, 12),
-                coordinates: { lon: -120.19137, lat: 34.615883, height: 0 }
-            },
-            {
-                name: "Creekside Village",
-                status: "Approved",
-                color: "lightgreen",
-                dimensions: new Cesium.Cartesian3(23, 23, 12),
-                coordinates: { lon: -120.19167, lat: 34.61513, height: 0 }
-            },
-            // Construction Plans Review – 5 placeholders
-            {
-                name: "Pacific Flips Gymnastics",
-                status: "Construction Plans Review",
-                color: "lightyellow",
-                dimensions: new Cesium.Cartesian3(26, 26, 4),
-                coordinates: { lon: -120.1970, lat: 34.61300, height: 0 }
-            },
-            {
-                name: "Chanin Wine Company",
-                status: "Construction Plans Review",
-                color: "lightyellow",
-                dimensions: new Cesium.Cartesian3(12, 12, 8),
-                coordinates: { lon: -120.1993, lat: 34.61521, height: 0 }
-            },
-            {
-                name: "Buellton Hub",
-                status: "Construction Plans Review",
-                color: "lightyellow",
-                dimensions: new Cesium.Cartesian3(85, 85, 12),
-                coordinates: { lon: -120.20334, lat: 34.60857, height: 0 }
-            },
-            {
-                name: "Central Ave Duplexes & ADUs",
-                status: "Construction Plans Review",
-                color: "lightyellow",
-                dimensions: new Cesium.Cartesian3(13, 13, 4),
-                coordinates: { lon: -120.19349, lat: 34.61542, height: 0 }
-            },
-            {
-                name: "The Waypoint (Live Oaks Bowling)",
-                status: "Construction Plans Review",
-                color: "lightyellow",
-                dimensions: new Cesium.Cartesian3(61, 61, 170),
-                coordinates: { lon: -120.1879, lat: 34.60831, height: 0 }
-            },
-            // Under Construction – 3 placeholders
-            {
-                name: "Village Senior Apartments",
-                status: "Under Construction",
-                color: "plum",
-                dimensions: new Cesium.Cartesian3(10, 10, 8),
-                coordinates: { lon: -120.18667, lat: 34.612887, height: 0 }
-            },
-            {
-                name: "Polo Village",
-                status: "Under Construction",
-                color: "plum",
-                dimensions: new Cesium.Cartesian3(28, 28, 12),
-                coordinates: { lon: -120.18292, lat: 34.61510, height: 0 }
-            },
-            {
-                name: "Buellton Garden Apartments",
-                status: "Under Construction",
-                color: "plum",
-                dimensions: new Cesium.Cartesian3(26, 26, 12),
-                coordinates: { lon: -120.18949, lat: 34.60897, height: 0 }
-            }
-        ];
+        async function flyToOrientationAndLevel() {
+            if (!buildingBoundingSphere) return; // tileset not ready yet
 
-        // We store each building's data for easy camera access
-        const buildingDataMap = {};
-
-        // Create geometry for placeholders (except PeaSoup)
-        function createPlaceholderPrimitive(building) {
-            const { color, dimensions, coordinates } = building;
-            const pos = Cesium.Cartesian3.fromDegrees(
-                coordinates.lon,
-                coordinates.lat,
-                coordinates.height || 0
-            );
-            const boxGeometry = new Cesium.BoxGeometry({
-                vertexFormat: Cesium.MaterialAppearance.VERTEX_FORMAT,
-                dimensions: dimensions
-            });
-            const instance = new Cesium.GeometryInstance({
-                geometry: boxGeometry,
-                modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(pos),
-                id: building.name
-            });
-            const primitive = new Cesium.Primitive({
-                geometryInstances: instance,
-                appearance: new Cesium.MaterialAppearance({
-                    material: Cesium.Material.fromType("Color", {
-                        color: Cesium.Color.fromCssColorString(color).withAlpha(0.7)
-                    }),
-                    translucent: true,
-                    closed: true
-                })
-            });
-            viewer.primitives.add(primitive);
-
-            // Also add a label
-            viewer.entities.add({
-                name: building.name,
-                position: pos,
-                label: {
-                    text: building.name,
-                    font: "14pt sans-serif",
-                    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                    outlineWidth: 2,
-                    verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                    pixelOffset: new Cesium.Cartesian2(0, -20)
-                }
-            });
-
-            buildingDataMap[building.name] = {
-                isTileset: false,
-                position: pos
-            };
-        }
-
-        // Build geometry for placeholders on load
-        buildingPlaceholders.forEach((b) => {
-            if (b.isTileset) {
-                // This is PeaSoup
-                buildingDataMap[b.name] = { isTileset: true };
-            } else {
-                createPlaceholderPrimitive(b);
-            }
-        });
-
-        /*************************************************
-         * 6) Building Status & Building Select
-         *************************************************/
-        const buildingStatusSelect = document.getElementById("buildingStatusSelect");
-        const buildingSelect = document.getElementById("buildingSelect");
-
-        buildingStatusSelect.addEventListener("change", () => {
-            const statusVal = buildingStatusSelect.value;
-            const filtered = buildingPlaceholders.filter(b => b.status === statusVal);
-            buildingSelect.innerHTML = "";
-            if (!filtered.length) {
-                buildingSelect.innerHTML = `<option value="">No buildings</option>`;
-                return;
-            }
-            buildingSelect.innerHTML = `<option value="">-- Select Building --</option>`;
-            filtered.forEach(b => {
-                const opt = document.createElement("option");
-                opt.value = b.name;
-                opt.text = b.name;
-                buildingSelect.appendChild(opt);
-            });
-        });
-
-        buildingSelect.addEventListener("change", () => {
-            currentBuilding = buildingSelect.value || "";
-            if (!currentBuilding) {
-                // If user picks nothing, we can optionally do nothing or re-fly to bounding sphere
-                viewer.camera.flyToBoundingSphere(buildingBoundingSphere, { duration: 2 });
-                return;
-            }
-            flyToSelectedBuilding();
-        });
-
-        let currentBuilding = "";
-
-        function flyToSelectedBuilding() {
-            const bData = buildingDataMap[currentBuilding];
-            if (!bData) {
-                // fallback
-                viewer.camera.flyToBoundingSphere(buildingBoundingSphere, { duration: 2 });
-                return;
-            }
-            if (bData.isTileset) {
-                // Fly to PeaSoup bounding sphere
-                if (buildingBoundingSphere) {
-                    viewer.camera.flyToBoundingSphere(buildingBoundingSphere, { duration: 2 });
-                }
-                return;
-            }
-            // It's a geometry placeholder
             const orientation = orientationSelect.value;
             const buildingLevel = buildingLevelSelect.value;
-            const pos = Cesium.Cartesian3.clone(bData.position);
-            const carto = Cesium.Ellipsoid.WGS84.cartesianToCartographic(pos);
-            carto.height += feetToMeters(LEVEL_ALTITUDES_FEET[buildingLevel] || 0);
-            const newPos = Cesium.Ellipsoid.WGS84.cartographicToCartesian(carto);
 
+            // Clone the building's bounding sphere.
+            const tempSphere = Cesium.BoundingSphere.clone(buildingBoundingSphere);
+
+            // Convert the center to cartographic to adjust altitude.
+            const cartoCenter = Cesium.Ellipsoid.WGS84.cartesianToCartographic(tempSphere.center);
+            const levelFeet = LEVEL_ALTITUDES_FEET[buildingLevel] || 0;
+            const levelMeters = feetToMeters(levelFeet);
+            cartoCenter.height += levelMeters; // Adjust altitude to selected level.
+            tempSphere.center = Cesium.Ellipsoid.WGS84.cartographicToCartesian(cartoCenter);
+
+            // Set pitch: 0° for a horizontal facade view; -90° for BIRDSEYE.
             let pitch = 0;
             if (orientation === "BIRDSEYE") {
                 pitch = Cesium.Math.toRadians(-90);
             }
             const heading = ORIENTATION_HEADING[orientation] || 0;
 
-            viewer.camera.flyTo({
-                destination: newPos,
-                orientation: { heading, pitch, roll: 0 },
+            // Set range so the building fills most of the screen.
+            const rangeFactor = 1.4;
+            const range = tempSphere.radius * rangeFactor;
+
+            // Fly the camera so the building is centered, with the chosen heading/pitch.
+            viewer.camera.flyToBoundingSphere(tempSphere, {
+                offset: new Cesium.HeadingPitchRange(heading, pitch, range),
                 duration: 2
             });
         }
 
         /*************************************************
-         * 7) NREL + OpenWeatherMap + LLM Analysis
+         * 5) Shading & Multipliers
+         *************************************************/
+        const LEVEL_MULTIPLIERS = {
+            "Ground": 1.0,
+            "2nd Story": 1.05,
+            "4th Floor": 1.10,
+            "Birds_Eye": 1.20,
+        };
+
+        const LEVEL_ELEVATIONS = {
+            "Ground": "0 ft",
+            "2nd Story": "27 ft, 1 in",
+            "4th Floor": "52 ft, 3 in",
+            "Birds_Eye": "N/A"
+        };
+
+        const LEVEL_SHADE_MAPPING = {
+            "Birds_Eye": "NONE",
+            "4th Floor": "LIGHT",
+            "2nd Story": "MEDIUM",
+            "Ground": "HEAVY"
+        };
+
+        const SHADING_ADJUSTMENTS = {
+            "NONE": 1.0,
+            "LIGHT": 0.90,
+            "MEDIUM": 0.80,
+            "HEAVY": 0.50,
+        };
+
+        /*************************************************
+         * 6) NREL + OpenWeatherMap Data
          *************************************************/
         async function fetchAnalysisData(season, hour, orientation) {
             const lat = 34.61346;
             const lon = -120.1918;
+            // Use global window.NREL_API_KEY and window.OPENWEATHER_API_KEY fetched from /api/config
             const nrelUrl = `https://developer.nrel.gov/api/pvwatts/v6.json?api_key=${window.NREL_API_KEY}&lat=${lat}&lon=${lon}&system_capacity=4&azimuth=180&tilt=20&array_type=1&module_type=1&losses=10`;
             let nrelData;
             try {
@@ -597,6 +421,9 @@
             return { monthlyKwh, solrad, climate, energyCost };
         }
 
+        /*************************************************
+         * 7) LLM + Analysis Panel
+         *************************************************/
         async function generateLLMText(prompt) {
             try {
                 const response = await fetch("/api/generateLLMText", {
@@ -617,64 +444,26 @@
             }
         }
 
-        /*************************************************
-         * 8) updateAnalysisPanel (from original code)
-         *************************************************/
         async function updateAnalysisPanel() {
             const season = currentSeason;
             const hour = parseInt(timeSlider.value, 10);
             const orientation = orientationSelect.value;
             const buildingLevel = buildingLevelSelect.value;
-
-            // Derive shading from building level
-            const LEVEL_SHADE_MAPPING = {
-                "Birds_Eye": "NONE",
-                "4th Floor": "LIGHT",
-                "2nd Story": "MEDIUM",
-                "Ground": "HEAVY"
-            };
-            const shading = LEVEL_SHADE_MAPPING[buildingLevel] || "NONE";
-
-            const LEVEL_ELEVATIONS = {
-                "Ground": "0 ft",
-                "2nd Story": "27 ft, 1 in",
-                "4th Floor": "52 ft, 3 in",
-                "Birds_Eye": "N/A"
-            };
+            const shading = shadingSelect.value;
             const levelElevation = LEVEL_ELEVATIONS[buildingLevel] || "";
 
-            // Update the Cesium clock
             setClockBoundsForDate(currentDateStr);
             setClockToPST(currentDateStr, hour);
             hourDisplay.textContent = hour;
 
-            // Fetch the analysis data
             const data = await fetchAnalysisData(season, hour, orientation);
             if (!data) return;
+            let { solrad, climate, energyCost, monthlyKwh } = data;
 
-            let { solrad, climate, energyCost } = data;
-
-            // Building level multiplier
-            const LEVEL_MULTIPLIERS = {
-                "Ground": 1.0,
-                "2nd Story": 1.05,
-                "4th Floor": 1.10,
-                "Birds_Eye": 1.20,
-            };
-            solrad *= LEVEL_MULTIPLIERS[buildingLevel];
-
-            // Additional shading factor
-            const SHADING_ADJUSTMENTS = {
-                "NONE": 1.0,
-                "LIGHT": 0.90,
-                "MEDIUM": 0.80,
-                "HEAVY": 0.50,
-            };
-            solrad *= SHADING_ADJUSTMENTS[shading];
-
+            solrad *= SHADING_ADJUSTMENTS[shading] * LEVEL_MULTIPLIERS[buildingLevel];
             const helioViewsScore = solrad * 2;
 
-            // Build LLM prompt
+            // Build prompt for LLM text generation
             const summaryPrompt = `
 PROPERTY DETAILS:
 • Address: Buellton, CA (lat: 34.61346, lon: -120.1918)
@@ -695,15 +484,15 @@ TASK:
 Final Output Format:
 <h3>Highlights</h3>
 <ul>
-          <li>Bullet points…</li>
+                  <li>Bullet points…</li>
 </ul>
 <h3>Cautions</h3>
 <ul>
-          <li>Bullet points…</li>
+                  <li>Bullet points…</li>
 </ul>
-                `;
-
+                                `;
             const llmText = await generateLLMText(summaryPrompt) || "";
+
             const highlightsRegex = /<h3>Highlights<\/h3>[\s\S]*?(?=<h3>Cautions<\/h3>)/;
             const cautionsRegex = /<h3>Cautions<\/h3>[\s\S]*/;
 
@@ -717,26 +506,25 @@ Final Output Format:
             if (cautionsMatch) cautionsHTML = cautionsMatch[0].trim();
 
             analysisResults.innerHTML = `
-                    <div id="analysisResultsTop">
-                      <h3>Est. HelioViews Score: <b>${helioViewsScore.toFixed(1)}</b></h3>
-                      <div><strong>Base Solar Potential:</strong> ${solrad.toFixed(2)} kWh/m²/day</div>
-                      <div><strong>Climate Adjustment:</strong> ${climate}</div>
-                      <div><strong>Elevation Height:</strong> ${levelElevation}</div>
-                      <div><strong>Shade:</strong> ${shading}</div>
-                    </div>
-                    <div id="analysisColumns">
-                      <div class="analysis-col highlights-col">
-                        ${highlightsHTML}
-                      </div>
-                      <div class="analysis-col cautions-col">
-                        ${cautionsHTML}
-                      </div>
-                    </div>
-                `;
+                        <div id="analysisResultsTop">
+                          <h3>Est. HelioViews Score: <b>${helioViewsScore.toFixed(1)}</b></h3>
+                          <div><strong>Base Solar Potential:</strong> ${solrad.toFixed(2)} kWh/m²/day</div>
+                          <div><strong>Climate Adjustment:</strong> ${climate}</div>
+                          <div><strong>Elevation Height:</strong> ${levelElevation}</div>
+                        </div>
+                        <div id="analysisColumns">
+                          <div class="analysis-col highlights-col">
+                            ${highlightsHTML}
+                          </div>
+                          <div class="analysis-col cautions-col">
+                            ${cautionsHTML}
+                          </div>
+                        </div>
+                      `;
         }
 
         /*************************************************
-         * 9) Original Event Listeners
+         * 8) Event Listeners
          *************************************************/
         const seasonRadios = document.querySelectorAll('input[name="season"]');
         seasonRadios.forEach(radio => {
@@ -751,20 +539,27 @@ Final Output Format:
 
         timeSlider.addEventListener("input", updateAnalysisPanel);
 
-        orientationSelect.addEventListener("change", () => {
-            if (currentBuilding) flyToSelectedBuilding();
+        orientationSelect.addEventListener("change", async () => {
+            await flyToOrientationAndLevel();
             updateAnalysisPanel();
         });
 
-        buildingLevelSelect.addEventListener("change", () => {
-            if (currentBuilding) flyToSelectedBuilding();
+        buildingLevelSelect.addEventListener("change", async () => {
+            const selectedLevel = buildingLevelSelect.value;
+            if (LEVEL_SHADE_MAPPING[selectedLevel]) {
+                shadingSelect.value = LEVEL_SHADE_MAPPING[selectedLevel];
+            }
+            await flyToOrientationAndLevel();
             updateAnalysisPanel();
         });
 
-        // On load
+        shadingSelect.addEventListener("change", updateAnalysisPanel);
+
+        /*************************************************
+         * 9) Initial Setup
+         *************************************************/
         setClockBoundsForDate(currentDateStr);
         setClockToPST(currentDateStr, parseInt(timeSlider.value, 10));
-        updateAnalysisPanel();
-    </script>
+        updateAnalysisPanel();</script>
 </body>
 </html>
