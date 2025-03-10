@@ -112,8 +112,7 @@
             font-size: 0.9em;
             line-height: 1.4;
         }
-
-        /* Simple styling for dropdowns, range inputs, etc. */
+        /* Simple styling for dropdowns and range inputs */
         select, input[type="range"] {
             margin: 5px 0;
             padding: 4px;
@@ -207,8 +206,8 @@
         /*************************************************
          * 0) Fetch Public API Config from the Server
          *************************************************/
-        Cesium.Ion.defaultAccessToken =
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5MGM5NmY1Mi00OTcwLTQ2NDctYWYwOC0xNGM3YTFlZmQzZjgiLCJpZCI6MjMwMDE2LCJpYXQiOjE3MzY2MzU1ODZ9.zbfWIKXddKs4vm5an-xtwsli8fxIIEH0m0TA65S9b_k";
+        Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5MGM5NmY1Mi00OTcwLTQ2NDctYWYwOC0xNGM3YTFlZmQzZjgiLCJpZCI6MjMwMDE2LCJpYXQiOjE3MzY2MzU1ODZ9.zbfWIKXddKs4vm5an-xtwsli8fxIIEH0m0TA65S9b_k";
+
         fetch("/api/config")
             .then((response) => response.json())
             .then((config) => {
@@ -228,30 +227,14 @@
             animation: false,
         });
 
+        // Load OSM Buildings (optional)
         (async () => {
             const osmBuildings = await Cesium.createOsmBuildingsAsync();
             viewer.scene.primitives.add(osmBuildings);
         })();
 
         /*************************************************
-         * 2) Bird's-Eye City-Wide on Load
-         *************************************************/
-        function flyToBirdsEyeCity() {
-            // ~800 ft above the city
-            const destination = Cesium.Cartesian3.fromDegrees(-120.19107926363813, 34.612499527190124, 244);
-            viewer.camera.flyTo({
-                destination: destination,
-                orientation: {
-                    heading: Cesium.Math.toRadians(0),
-                    pitch: Cesium.Math.toRadians(-90),
-                    roll: 0
-                },
-                duration: 2
-            });
-        }
-
-        /*************************************************
-         * 3) Load the Pea Soup Building Tileset
+         * 2) PeaSoup Building Tileset
          *************************************************/
         const PEA_SOUP_ASSET_ID = 3114933;
         let buildingTileset, buildingBoundingSphere;
@@ -260,12 +243,65 @@
             viewer.scene.primitives.add(buildingTileset);
             await buildingTileset.readyPromise;
             buildingBoundingSphere = Cesium.BoundingSphere.clone(buildingTileset.boundingSphere);
-            // Instead of flying to bounding sphere, we do a city-wide approach first:
-            flyToBirdsEyeCity();
+            // Old code: On load, immediately fly to PeaSoup bounding sphere
+            viewer.camera.flyToBoundingSphere(buildingBoundingSphere, { duration: 2 });
         })();
 
         /*************************************************
-         * 4) Building Placeholders
+         * 3) Season & Time Setup (from original code)
+         *************************************************/
+        const SEASON_DATES = {
+            Winter: "2021-01-14",
+            Spring: "2021-04-14",
+            Summer: "2021-07-14",
+            Fall: "2021-10-14",
+        };
+
+        let currentSeason = "Winter";
+        let currentDateStr = SEASON_DATES[currentSeason];
+
+        function setClockBoundsForDate(dateStr) {
+            const start = new Date(`${dateStr}T08:00:00-08:00`);
+            const stop = new Date(`${dateStr}T20:00:00-08:00`);
+            const startJulian = Cesium.JulianDate.fromDate(start);
+            const stopJulian = Cesium.JulianDate.fromDate(stop);
+            viewer.clock.startTime = startJulian.clone();
+            viewer.clock.stopTime = stopJulian.clone();
+            viewer.clock.currentTime = startJulian.clone();
+            viewer.clock.clockRange = Cesium.ClockRange.CLAMPED;
+            viewer.clock.shouldAnimate = false;
+        }
+
+        function setClockToPST(dateStr, hourPST) {
+            const dateString = `${dateStr}T${hourPST.toString().padStart(2, "0")}:00:00-08:00`;
+            const newDate = new Date(dateString);
+            viewer.clock.currentTime = Cesium.JulianDate.fromDate(newDate);
+        }
+
+        /*************************************************
+         * 4) Building Level & Orientation (original code)
+         *************************************************/
+        const LEVEL_ALTITUDES_FEET = {
+            "Ground": 0,
+            "2nd Story": 27.0833,
+            "4th Floor": 52.25,
+            "Birds_Eye": 100
+        };
+
+        function feetToMeters(ft) {
+            return ft * 0.3048;
+        }
+
+        const ORIENTATION_HEADING = {
+            "NORTH": Cesium.Math.toRadians(0),
+            "SOUTH": Cesium.Math.toRadians(180),
+            "EAST": Cesium.Math.toRadians(90),
+            "WEST": Cesium.Math.toRadians(270),
+            "BIRDSEYE": Cesium.Math.toRadians(0)
+        };
+
+        /*************************************************
+         * 5) Building Placeholders
          *************************************************/
         const buildingPlaceholders = [
             // Conceptual Review – Pea Soup asset
@@ -313,7 +349,7 @@
                 dimensions: new Cesium.Cartesian3(23, 23, 12),
                 coordinates: { lon: -120.19167, lat: 34.61513, height: 0 }
             },
-            // Construction Plans Review – 5 placeholders shown, 3 commented out for later
+            // Construction Plans Review – 5 placeholders
             {
                 name: "Pacific Flips Gymnastics",
                 status: "Construction Plans Review",
@@ -373,13 +409,17 @@
             }
         ];
 
-        // We'll store references to geometry so we can fly to them
+        // We store each building's data for easy camera access
         const buildingDataMap = {};
 
-        // Helper to create geometry
+        // Create geometry for placeholders (except PeaSoup)
         function createPlaceholderPrimitive(building) {
             const { color, dimensions, coordinates } = building;
-            const pos = Cesium.Cartesian3.fromDegrees(coordinates.lon, coordinates.lat, coordinates.height || 0);
+            const pos = Cesium.Cartesian3.fromDegrees(
+                coordinates.lon,
+                coordinates.lat,
+                coordinates.height || 0
+            );
             const boxGeometry = new Cesium.BoxGeometry({
                 vertexFormat: Cesium.MaterialAppearance.VERTEX_FORMAT,
                 dimensions: dimensions
@@ -421,28 +461,25 @@
             };
         }
 
-        // Build geometry for all placeholders except PeaSoup
-        // (PeaSoup is a tileset, so we track that differently)
-        buildingPlaceholders.forEach((bld) => {
-            if (bld.isTileset) {
-                // We'll store a reference so we know it's a tileset
-                buildingDataMap[bld.name] = { isTileset: true };
+        // Build geometry for placeholders on load
+        buildingPlaceholders.forEach((b) => {
+            if (b.isTileset) {
+                // This is PeaSoup
+                buildingDataMap[b.name] = { isTileset: true };
             } else {
-                createPlaceholderPrimitive(bld);
+                createPlaceholderPrimitive(b);
             }
         });
 
         /*************************************************
-         * 5) Building Status & Building Dropdowns
+         * 6) Building Status & Building Select
          *************************************************/
         const buildingStatusSelect = document.getElementById("buildingStatusSelect");
         const buildingSelect = document.getElementById("buildingSelect");
 
         buildingStatusSelect.addEventListener("change", () => {
-            const selectedStatus = buildingStatusSelect.value;
-            // Filter placeholders by status
-            const filtered = buildingPlaceholders.filter(b => b.status === selectedStatus);
-            // Rebuild buildingSelect
+            const statusVal = buildingStatusSelect.value;
+            const filtered = buildingPlaceholders.filter(b => b.status === statusVal);
             buildingSelect.innerHTML = "";
             if (!filtered.length) {
                 buildingSelect.innerHTML = `<option value="">No buildings</option>`;
@@ -460,7 +497,8 @@
         buildingSelect.addEventListener("change", () => {
             currentBuilding = buildingSelect.value || "";
             if (!currentBuilding) {
-                flyToBirdsEyeCity();
+                // If user picks nothing, we can optionally do nothing or re-fly to bounding sphere
+                viewer.camera.flyToBoundingSphere(buildingBoundingSphere, { duration: 2 });
                 return;
             }
             flyToSelectedBuilding();
@@ -468,15 +506,15 @@
 
         let currentBuilding = "";
 
-        // Fly to the building selected
         function flyToSelectedBuilding() {
             const bData = buildingDataMap[currentBuilding];
             if (!bData) {
-                flyToBirdsEyeCity();
+                // fallback
+                viewer.camera.flyToBoundingSphere(buildingBoundingSphere, { duration: 2 });
                 return;
             }
             if (bData.isTileset) {
-                // PeaSoup bounding sphere
+                // Fly to PeaSoup bounding sphere
                 if (buildingBoundingSphere) {
                     viewer.camera.flyToBoundingSphere(buildingBoundingSphere, { duration: 2 });
                 }
@@ -485,25 +523,11 @@
             // It's a geometry placeholder
             const orientation = orientationSelect.value;
             const buildingLevel = buildingLevelSelect.value;
-            const LEVEL_ALTITUDES_FEET = {
-                "Ground": 0,
-                "2nd Story": 27.0833,
-                "4th Floor": 52.25,
-                "Birds_Eye": 100
-            };
             const pos = Cesium.Cartesian3.clone(bData.position);
             const carto = Cesium.Ellipsoid.WGS84.cartesianToCartographic(pos);
-            carto.height += (LEVEL_ALTITUDES_FEET[buildingLevel] || 0) * 0.3048;
-
+            carto.height += feetToMeters(LEVEL_ALTITUDES_FEET[buildingLevel] || 0);
             const newPos = Cesium.Ellipsoid.WGS84.cartographicToCartesian(carto);
 
-            const ORIENTATION_HEADING = {
-                "NORTH": Cesium.Math.toRadians(0),
-                "SOUTH": Cesium.Math.toRadians(180),
-                "EAST": Cesium.Math.toRadians(90),
-                "WEST": Cesium.Math.toRadians(270),
-                "BIRDSEYE": Cesium.Math.toRadians(0)
-            };
             let pitch = 0;
             if (orientation === "BIRDSEYE") {
                 pitch = Cesium.Math.toRadians(-90);
@@ -518,37 +542,7 @@
         }
 
         /*************************************************
-         * 6) Season & Time Setup
-         *************************************************/
-        const SEASON_DATES = {
-            Winter: "2021-01-14",
-            Spring: "2021-04-14",
-            Summer: "2021-07-14",
-            Fall: "2021-10-14"
-        };
-        let currentSeason = "Winter";
-        let currentDateStr = SEASON_DATES[currentSeason];
-
-        function setClockBoundsForDate(dateStr) {
-            const start = new Date(`${dateStr}T08:00:00-08:00`);
-            const stop = new Date(`${dateStr}T20:00:00-08:00`);
-            const startJulian = Cesium.JulianDate.fromDate(start);
-            const stopJulian = Cesium.JulianDate.fromDate(stop);
-            viewer.clock.startTime = startJulian.clone();
-            viewer.clock.stopTime = stopJulian.clone();
-            viewer.clock.currentTime = startJulian.clone();
-            viewer.clock.clockRange = Cesium.ClockRange.CLAMPED;
-            viewer.clock.shouldAnimate = false;
-        }
-
-        function setClockToPST(dateStr, hourPST) {
-            const dateString = `${dateStr}T${hourPST.toString().padStart(2, "0")}:00:00-08:00`;
-            const newDate = new Date(dateString);
-            viewer.clock.currentTime = Cesium.JulianDate.fromDate(newDate);
-        }
-
-        /*************************************************
-         * 7) NREL + OpenWeatherMap Data
+         * 7) NREL + OpenWeatherMap + LLM Analysis
          *************************************************/
         async function fetchAnalysisData(season, hour, orientation) {
             const lat = 34.61346;
@@ -603,9 +597,6 @@
             return { monthlyKwh, solrad, climate, energyCost };
         }
 
-        /*************************************************
-         * 8) LLM + Analysis Panel
-         *************************************************/
         async function generateLLMText(prompt) {
             try {
                 const response = await fetch("/api/generateLLMText", {
@@ -626,6 +617,9 @@
             }
         }
 
+        /*************************************************
+         * 8) updateAnalysisPanel (from original code)
+         *************************************************/
         async function updateAnalysisPanel() {
             const season = currentSeason;
             const hour = parseInt(timeSlider.value, 10);
@@ -649,37 +643,38 @@
             };
             const levelElevation = LEVEL_ELEVATIONS[buildingLevel] || "";
 
+            // Update the Cesium clock
             setClockBoundsForDate(currentDateStr);
             setClockToPST(currentDateStr, hour);
             hourDisplay.textContent = hour;
 
+            // Fetch the analysis data
             const data = await fetchAnalysisData(season, hour, orientation);
             if (!data) return;
 
             let { solrad, climate, energyCost } = data;
-            // We won't use monthlyKwh in this snippet, but it's returned if needed.
 
             // Building level multiplier
             const LEVEL_MULTIPLIERS = {
                 "Ground": 1.0,
                 "2nd Story": 1.05,
                 "4th Floor": 1.10,
-                "Birds_Eye": 1.20
+                "Birds_Eye": 1.20,
             };
             solrad *= LEVEL_MULTIPLIERS[buildingLevel];
 
-            // Shading factor
+            // Additional shading factor
             const SHADING_ADJUSTMENTS = {
                 "NONE": 1.0,
                 "LIGHT": 0.90,
                 "MEDIUM": 0.80,
-                "HEAVY": 0.50
+                "HEAVY": 0.50,
             };
             solrad *= SHADING_ADJUSTMENTS[shading];
 
             const helioViewsScore = solrad * 2;
 
-            // Build prompt for LLM text generation
+            // Build LLM prompt
             const summaryPrompt = `
 PROPERTY DETAILS:
 • Address: Buellton, CA (lat: 34.61346, lon: -120.1918)
@@ -706,42 +701,43 @@ Final Output Format:
 <ul>
           <li>Bullet points…</li>
 </ul>
-          `;
-            const llmText = await generateLLMText(summaryPrompt) || "";
+                `;
 
+            const llmText = await generateLLMText(summaryPrompt) || "";
             const highlightsRegex = /<h3>Highlights<\/h3>[\s\S]*?(?=<h3>Cautions<\/h3>)/;
             const cautionsRegex = /<h3>Cautions<\/h3>[\s\S]*/;
+
             let highlightsHTML = "";
             let cautionsHTML = "";
 
             const highlightsMatch = llmText.match(highlightsRegex);
             const cautionsMatch = llmText.match(cautionsRegex);
+
             if (highlightsMatch) highlightsHTML = highlightsMatch[0].trim();
             if (cautionsMatch) cautionsHTML = cautionsMatch[0].trim();
 
             analysisResults.innerHTML = `
-            <div id="analysisResultsTop">
-              <h3>Est. HelioViews Score: <b>${helioViewsScore.toFixed(1)}</b></h3>
-              <div><strong>Base Solar Potential:</strong> ${solrad.toFixed(2)} kWh/m²/day</div>
-              <div><strong>Climate Adjustment:</strong> ${climate}</div>
-              <div><strong>Elevation Height:</strong> ${levelElevation}</div>
-              <div><strong>Shade:</strong> ${shading}</div>
-            </div>
-            <div id="analysisColumns">
-              <div class="analysis-col highlights-col">
-                ${highlightsHTML}
-              </div>
-              <div class="analysis-col cautions-col">
-                ${cautionsHTML}
-              </div>
-            </div>
-          `;
+                    <div id="analysisResultsTop">
+                      <h3>Est. HelioViews Score: <b>${helioViewsScore.toFixed(1)}</b></h3>
+                      <div><strong>Base Solar Potential:</strong> ${solrad.toFixed(2)} kWh/m²/day</div>
+                      <div><strong>Climate Adjustment:</strong> ${climate}</div>
+                      <div><strong>Elevation Height:</strong> ${levelElevation}</div>
+                      <div><strong>Shade:</strong> ${shading}</div>
+                    </div>
+                    <div id="analysisColumns">
+                      <div class="analysis-col highlights-col">
+                        ${highlightsHTML}
+                      </div>
+                      <div class="analysis-col cautions-col">
+                        ${cautionsHTML}
+                      </div>
+                    </div>
+                `;
         }
 
         /*************************************************
          * 9) Original Event Listeners
          *************************************************/
-        // Season
         const seasonRadios = document.querySelectorAll('input[name="season"]');
         seasonRadios.forEach(radio => {
             radio.addEventListener("change", (e) => {
@@ -753,10 +749,8 @@ Final Output Format:
             });
         });
 
-        // Time slider
         timeSlider.addEventListener("input", updateAnalysisPanel);
 
-        // Orientation, building level
         orientationSelect.addEventListener("change", () => {
             if (currentBuilding) flyToSelectedBuilding();
             updateAnalysisPanel();
@@ -767,12 +761,10 @@ Final Output Format:
             updateAnalysisPanel();
         });
 
-        /*************************************************
-         * 10) Initial Setup
-         *************************************************/
+        // On load
         setClockBoundsForDate(currentDateStr);
         setClockToPST(currentDateStr, parseInt(timeSlider.value, 10));
-        updateAnalysisPanel(); // Kick off analysis on load
+        updateAnalysisPanel();
     </script>
 </body>
 </html>
