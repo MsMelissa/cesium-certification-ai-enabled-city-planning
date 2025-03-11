@@ -14,7 +14,6 @@
             padding: 0;
             display: block;
         }
-
         /* Container for all UI controls, arranged in a single row */
         #controlsContainer {
             position: absolute;
@@ -31,7 +30,6 @@
             gap: 20px;
             align-items: flex-start;
         }
-
         /* Inline logo container */
         #logoContainer {
             width: 100px;
@@ -42,12 +40,10 @@
             background-position: center center;
             background-size: contain;
         }
-
         /* Each control section */
         #controlsContainer > div {
             min-width: 120px;
         }
-
         /* Analysis panel across bottom */
         #analysisPanel {
             position: absolute;
@@ -62,13 +58,11 @@
             display: flex;
             flex-direction: column;
         }
-
-        /* Container for all analysis content (above disclaimers) */
+        /* Container for analysis content */
         #analysisResultsContainer {
             display: flex;
             flex-direction: column;
         }
-
         /* Top row of metrics and the HelioViews Score */
         #analysisResultsTop {
             display: flex;
@@ -80,7 +74,6 @@
             #analysisResultsTop > div {
                 white-space: nowrap;
             }
-
         /* Two-column layout for highlights/cautions */
         #analysisColumns {
             display: flex;
@@ -98,21 +91,13 @@
         .cautions-col {
             order: 2;
         }
-
         /* Style for disclaimer text */
         .disclaimer {
             color: red;
             font-size: 0.8em;
             margin-top: 10px;
         }
-
-        /* Slightly smaller bullet points, bigger than disclaimers */
-        #analysisPanel ul,
-        #analysisPanel li {
-            font-size: 0.9em;
-            line-height: 1.4;
-        }
-        /* Simple styling for dropdowns and range input */
+        /* Styling for dropdowns and slider */
         select, input[type="range"] {
             margin: 5px 0;
             padding: 4px;
@@ -229,7 +214,7 @@
         })();
 
         /*************************************************
-         * 2) Load the Pea Soup Building Tileset
+         * 2) Load the Pea Soup Tileset (PeaSoup ALL)
          *************************************************/
         const PEA_SOUP_ASSET_ID = 3114933;
         let buildingTileset, buildingBoundingSphere;
@@ -238,7 +223,9 @@
             viewer.scene.primitives.add(buildingTileset);
             await buildingTileset.readyPromise;
             buildingBoundingSphere = Cesium.BoundingSphere.clone(buildingTileset.boundingSphere);
-            viewer.camera.flyToBoundingSphere(buildingBoundingSphere, { duration: 2 });
+            // After loading the tileset, create building geometries and show city-wide view.
+            createBuildingGeometries();
+            computeCityWideBoundingSphereAndFly();
         })();
 
         /*************************************************
@@ -507,29 +494,113 @@ Final Output Format:
         });
 
         /*************************************************
-         * 9) Building Dropdown Setup (New)
+         * 9) Building Dropdown Setup (Step 2 changes)
          *************************************************/
-        const buildingStatusSelect = document.getElementById("buildingStatusSelect");
-        const buildingSelect = document.getElementById("buildingSelect");
+        // Updated building array including geometry details for Step 3
         const buildings = [
-            { name: "PeaSoup All Buildings", status: "Conceptual Review" },
-            { name: "Hwy 246 Commercial Center", status: "Applications in Process" },
-            { name: "Arco AM-PM Gas Station", status: "Applications in Process" },
-            { name: "BUE-17 Specific Plan (Campus 36)", status: "Applications in Process" },
-            { name: "The 518", status: "Approved" },
-            { name: "Creekside Village", status: "Approved" },
-            { name: "Pacific Flips Gymnastics", status: "Construction Plans Review" },
-            { name: "Chanin Wine Company", status: "Construction Plans Review" },
-            { name: "Buellton Hub", status: "Construction Plans Review" },
-            { name: "Central Ave Duplexes & ADUs", status: "Construction Plans Review" },
-            { name: "The Waypoint (Live Oaks Bowling)", status: "Construction Plans Review" },
-            { name: "Village Senior Apartments", status: "Under Construction" },
-            { name: "Polo Village", status: "Under Construction" },
-            { name: "Buellton Garden Apartments", status: "Under Construction" }
+            {
+                name: "PeaSoup ALL",
+                status: "Conceptual Review",
+                color: "pink",
+                coordinates: { lon: -120.1918, lat: 34.61346, height: 0 },
+                isTileset: true
+            },
+            {
+                name: "Hwy 246 Commercial Center",
+                status: "Applications in Process",
+                color: "#FFDAB9",
+                dimensions: new Cesium.Cartesian3(30, 30, 12),
+                coordinates: { lon: -120.19312, lat: 34.61305, height: 0 }
+            },
+            {
+                name: "Arco AM-PM Gas Station",
+                status: "Applications in Process",
+                color: "#FFDAB9",
+                dimensions: new Cesium.Cartesian3(26, 26, 4),
+                coordinates: { lon: -120.19042, lat: 34.61970, height: 0 }
+            },
+            {
+                name: "BUE-17 Specific Plan (Campus 36)",
+                status: "Applications in Process",
+                color: "#FFDAB9",
+                dimensions: new Cesium.Cartesian3(64, 64, 12),
+                coordinates: { lon: -120.20182, lat: 34.60883, height: 0 }
+            },
+            {
+                name: "The 518",
+                status: "Approved",
+                color: "lightgreen",
+                dimensions: new Cesium.Cartesian3(27, 27, 12),
+                coordinates: { lon: -120.19137, lat: 34.615883, height: 0 }
+            },
+            {
+                name: "Creekside Village",
+                status: "Approved",
+                color: "lightgreen",
+                dimensions: new Cesium.Cartesian3(23, 23, 12),
+                coordinates: { lon: -120.19167, lat: 34.61513, height: 0 }
+            },
+            {
+                name: "Pacific Flips Gymnastics",
+                status: "Construction Plans Review",
+                color: "lightyellow",
+                dimensions: new Cesium.Cartesian3(26, 26, 4),
+                coordinates: { lon: -120.1970, lat: 34.61300, height: 0 }
+            },
+            {
+                name: "Chanin Wine Company",
+                status: "Construction Plans Review",
+                color: "lightyellow",
+                dimensions: new Cesium.Cartesian3(12, 12, 8),
+                coordinates: { lon: -120.1993, lat: 34.61521, height: 0 }
+            },
+            {
+                name: "Buellton Hub",
+                status: "Construction Plans Review",
+                color: "lightyellow",
+                dimensions: new Cesium.Cartesian3(85, 85, 12),
+                coordinates: { lon: -120.20334, lat: 34.60857, height: 0 }
+            },
+            {
+                name: "Central Ave Duplexes & ADUs",
+                status: "Construction Plans Review",
+                color: "lightyellow",
+                dimensions: new Cesium.Cartesian3(13, 13, 4),
+                coordinates: { lon: -120.19349, lat: 34.61542, height: 0 }
+            },
+            {
+                name: "The Waypoint (Live Oaks Bowling)",
+                status: "Construction Plans Review",
+                color: "lightyellow",
+                dimensions: new Cesium.Cartesian3(61, 61, 170),
+                coordinates: { lon: -120.1879, lat: 34.60831, height: 0 }
+            },
+            {
+                name: "Village Senior Apartments",
+                status: "Under Construction",
+                color: "plum",
+                dimensions: new Cesium.Cartesian3(10, 10, 8),
+                coordinates: { lon: -120.18667, lat: 34.612887, height: 0 }
+            },
+            {
+                name: "Polo Village",
+                status: "Under Construction",
+                color: "plum",
+                dimensions: new Cesium.Cartesian3(28, 28, 12),
+                coordinates: { lon: -120.18292, lat: 34.61510, height: 0 }
+            },
+            {
+                name: "Buellton Garden Apartments",
+                status: "Under Construction",
+                color: "plum",
+                dimensions: new Cesium.Cartesian3(26, 26, 12),
+                coordinates: { lon: -120.18949, lat: 34.60897, height: 0 }
+            }
         ];
         function updateBuildingDropdown() {
             const status = buildingStatusSelect.value;
             buildingSelect.innerHTML = "";
+            // Filter buildings by status (or show all if "All" is selected)
             const filteredBuildings = status === "All" ? buildings : buildings.filter(b => b.status === status);
             filteredBuildings.forEach(building => {
                 const option = document.createElement("option");
@@ -539,15 +610,22 @@ Final Output Format:
             });
         }
         function flyToSelectedBuilding() {
-            const selectedBuilding = buildingSelect.value;
-            if (selectedBuilding === "PeaSoup All Buildings") {
+            const selectedName = buildingSelect.value;
+            const building = buildings.find(b => b.name === selectedName);
+            if (!building) return;
+            if (building.isTileset) {
                 if (buildingBoundingSphere) {
                     viewer.camera.flyToBoundingSphere(buildingBoundingSphere, { duration: 2 });
                 }
             } else {
-                console.log("Flying to placeholder geometry for", selectedBuilding);
-                const dummySphere = new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(-120.1918, 34.61346, 50), 200);
-                viewer.camera.flyToBoundingSphere(dummySphere, { duration: 2 });
+                const position = Cesium.Cartesian3.fromDegrees(building.coordinates.lon, building.coordinates.lat, building.coordinates.height);
+                let radius = 50;
+                if (building.dimensions) {
+                    const mag = Cesium.Cartesian3.magnitude(building.dimensions);
+                    radius = mag / 2;
+                }
+                const sphere = new Cesium.BoundingSphere(position, radius);
+                viewer.camera.flyToBoundingSphere(sphere, { duration: 2 });
             }
         }
         buildingStatusSelect.addEventListener("change", updateBuildingDropdown);
@@ -555,7 +633,64 @@ Final Output Format:
         updateBuildingDropdown();
 
         /*************************************************
-         * 10) Initial Setup
+         * 10) Create Building Geometries & Compute City-wide View
+         *************************************************/
+        let buildingGeometryPrimitive; // to hold the geometry boxes
+        function createBuildingGeometries() {
+            // Create geometry instances for buildings that are NOT tilesets
+            const instances = [];
+            buildings.forEach(building => {
+                if (building.isTileset) return;
+                if (!building.dimensions) return;
+                const position = Cesium.Cartesian3.fromDegrees(building.coordinates.lon, building.coordinates.lat, building.coordinates.height);
+                const modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(position);
+                const boxGeometry = Cesium.BoxGeometry.fromDimensions({ dimensions: building.dimensions });
+                const instance = new Cesium.GeometryInstance({
+                    geometry: boxGeometry,
+                    modelMatrix: modelMatrix,
+                    attributes: {
+                        color: Cesium.ColorGeometryInstanceAttribute.fromColor(Cesium.Color.fromCssColorString(building.color))
+                    }
+                });
+                instances.push(instance);
+            });
+            if (instances.length > 0) {
+                buildingGeometryPrimitive = new Cesium.Primitive({
+                    geometryInstances: instances,
+                    appearance: new Cesium.PerInstanceColorAppearance({ flat: true })
+                });
+                viewer.scene.primitives.add(buildingGeometryPrimitive);
+            }
+        }
+        function computeCityWideBoundingSphereAndFly() {
+            let cityBoundingSphere;
+            // Include the tileset's bounding sphere (if available)
+            if (buildingBoundingSphere) {
+                cityBoundingSphere = buildingBoundingSphere;
+            }
+            buildings.forEach(building => {
+                if (building.isTileset) return; // already included
+                if (!building.dimensions) return;
+                const position = Cesium.Cartesian3.fromDegrees(building.coordinates.lon, building.coordinates.lat, building.coordinates.height);
+                const diag = Cesium.Cartesian3.magnitude(building.dimensions);
+                const sphere = new Cesium.BoundingSphere(position, diag / 2);
+                if (!cityBoundingSphere) {
+                    cityBoundingSphere = sphere;
+                } else {
+                    cityBoundingSphere = Cesium.BoundingSphere.union(cityBoundingSphere, sphere, new Cesium.BoundingSphere());
+                }
+            });
+            // Fly to the city-wide bounding sphere with a bird’s-eye view (pitch -90°)
+            if (cityBoundingSphere) {
+                viewer.camera.flyToBoundingSphere(cityBoundingSphere, {
+                    offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-90), cityBoundingSphere.radius * 2),
+                    duration: 2
+                });
+            }
+        }
+
+        /*************************************************
+         * 11) Initial Setup
          *************************************************/
         setClockBoundsForDate(currentDateStr);
         setClockToPST(currentDateStr, parseInt(timeSlider.value, 10));
