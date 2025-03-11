@@ -1,7 +1,4 @@
-﻿//THIS IS THE CURRENT DEPLOPYED VERSION OF THE BUELLTON HELIOVIEWS APP
-// SAVE ME AND REPLACE INDEX.HTML WITH ME IF ALL GOES TO SHIT
-
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
@@ -166,16 +163,6 @@
                 <option value="Birds_Eye">Birds Eye</option>
             </select>
         </div>
-        <!-- Shading Dropdown -->
-        <div id="shadingContainer">
-            <strong>Shade:</strong><br />
-            <select id="shadingSelect">
-                <option value="NONE">NONE</option>
-                <option value="LIGHT">LIGHT</option>
-                <option value="MEDIUM">MEDIUM</option>
-                <option value="HEAVY">HEAVY</option>
-            </select>
-        </div>
     </div>
 
     <!-- HelioViews Analysis Panel -->
@@ -193,8 +180,8 @@
     <!-- Main JavaScript Code -->
     <script type="module">
         /*************************************************
-     * 0) Fetch Public API Config from the Server
-     *************************************************/
+         * 0) Fetch Public API Config from the Server
+         *************************************************/
 
         // Keep your Cesium Ion key in the client
         Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5MGM5NmY1Mi00OTcwLTQ2NDctYWYwOC0xNGM3YTFlZmQzZjgiLCJpZCI6MjMwMDE2LCJpYXQiOjE3MzY2MzU1ODZ9.zbfWIKXddKs4vm5an-xtwsli8fxIIEH0m0TA65S9b_k";
@@ -280,9 +267,9 @@
         // Feet above the building's base for each level.
         const LEVEL_ALTITUDES_FEET = {
             "Ground": 0,
-            "2nd Story": 27.0833,  // 27 ft 1 in
-            "4th Floor": 52.25,    // 52 ft 3 in
-            "Birds_Eye": 100       // arbitrary for birds-eye view
+            "2nd Story": 27.0833,
+            "4th Floor": 52.25,
+            "Birds_Eye": 100
         };
 
         function feetToMeters(ft) {
@@ -296,37 +283,30 @@
             "SOUTH": Cesium.Math.toRadians(180),
             "EAST": Cesium.Math.toRadians(90),
             "WEST": Cesium.Math.toRadians(270),
-            "BIRDSEYE": Cesium.Math.toRadians(0)  // heading ignored when pitch = -90
+            "BIRDSEYE": Cesium.Math.toRadians(0)
         };
 
         async function flyToOrientationAndLevel() {
-            if (!buildingBoundingSphere) return; // tileset not ready yet
+            if (!buildingBoundingSphere) return;
 
             const orientation = orientationSelect.value;
             const buildingLevel = buildingLevelSelect.value;
 
-            // Clone the building's bounding sphere.
             const tempSphere = Cesium.BoundingSphere.clone(buildingBoundingSphere);
-
-            // Convert the center to cartographic to adjust altitude.
             const cartoCenter = Cesium.Ellipsoid.WGS84.cartesianToCartographic(tempSphere.center);
             const levelFeet = LEVEL_ALTITUDES_FEET[buildingLevel] || 0;
             const levelMeters = feetToMeters(levelFeet);
-            cartoCenter.height += levelMeters; // Adjust altitude to selected level.
+            cartoCenter.height += levelMeters;
             tempSphere.center = Cesium.Ellipsoid.WGS84.cartographicToCartesian(cartoCenter);
 
-            // Set pitch: 0° for a horizontal facade view; -90° for BIRDSEYE.
             let pitch = 0;
             if (orientation === "BIRDSEYE") {
                 pitch = Cesium.Math.toRadians(-90);
             }
             const heading = ORIENTATION_HEADING[orientation] || 0;
-
-            // Set range so the building fills most of the screen.
             const rangeFactor = 1.4;
             const range = tempSphere.radius * rangeFactor;
 
-            // Fly the camera so the building is centered, with the chosen heading/pitch.
             viewer.camera.flyToBoundingSphere(tempSphere, {
                 offset: new Cesium.HeadingPitchRange(heading, pitch, range),
                 duration: 2
@@ -370,7 +350,6 @@
         async function fetchAnalysisData(season, hour, orientation) {
             const lat = 34.61346;
             const lon = -120.1918;
-            // Use global window.NREL_API_KEY and window.OPENWEATHER_API_KEY fetched from /api/config
             const nrelUrl = `https://developer.nrel.gov/api/pvwatts/v6.json?api_key=${window.NREL_API_KEY}&lat=${lat}&lon=${lon}&system_capacity=4&azimuth=180&tilt=20&array_type=1&module_type=1&losses=10`;
             let nrelData;
             try {
@@ -417,7 +396,7 @@
             if (temperature > 25) climate = "HOT";
             else if (temperature < 15) climate = "COLD";
 
-            const energyCost = 0.1990; // USD/kWh
+            const energyCost = 0.1990;
             return { monthlyKwh, solrad, climate, energyCost };
         }
 
@@ -449,7 +428,7 @@
             const hour = parseInt(timeSlider.value, 10);
             const orientation = orientationSelect.value;
             const buildingLevel = buildingLevelSelect.value;
-            const shading = shadingSelect.value;
+            const shading = LEVEL_SHADE_MAPPING[buildingLevel];
             const levelElevation = LEVEL_ELEVATIONS[buildingLevel] || "";
 
             setClockBoundsForDate(currentDateStr);
@@ -463,7 +442,6 @@
             solrad *= SHADING_ADJUSTMENTS[shading] * LEVEL_MULTIPLIERS[buildingLevel];
             const helioViewsScore = solrad * 2;
 
-            // Build prompt for LLM text generation
             const summaryPrompt = `
 PROPERTY DETAILS:
 • Address: Buellton, CA (lat: 34.61346, lon: -120.1918)
@@ -510,6 +488,7 @@ Final Output Format:
                           <h3>Est. HelioViews Score: <b>${helioViewsScore.toFixed(1)}</b></h3>
                           <div><strong>Base Solar Potential:</strong> ${solrad.toFixed(2)} kWh/m²/day</div>
                           <div><strong>Climate Adjustment:</strong> ${climate}</div>
+                          <div><strong>Shade:</strong> ${shading}</div>
                           <div><strong>Elevation Height:</strong> ${levelElevation}</div>
                         </div>
                         <div id="analysisColumns">
@@ -545,21 +524,16 @@ Final Output Format:
         });
 
         buildingLevelSelect.addEventListener("change", async () => {
-            const selectedLevel = buildingLevelSelect.value;
-            if (LEVEL_SHADE_MAPPING[selectedLevel]) {
-                shadingSelect.value = LEVEL_SHADE_MAPPING[selectedLevel];
-            }
             await flyToOrientationAndLevel();
             updateAnalysisPanel();
         });
-
-        shadingSelect.addEventListener("change", updateAnalysisPanel);
 
         /*************************************************
          * 9) Initial Setup
          *************************************************/
         setClockBoundsForDate(currentDateStr);
         setClockToPST(currentDateStr, parseInt(timeSlider.value, 10));
-        updateAnalysisPanel();</script>
+        updateAnalysisPanel();
+    </script>
 </body>
 </html>
