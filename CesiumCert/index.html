@@ -460,7 +460,7 @@ Final Output Format:
 <ul>
         <li>Bullet points…</li>
 </ul>
-                                `;
+          `;
 
             const llmText = await generateLLMText(summaryPrompt) || "";
             const highlightsRegex = /<h3>Highlights<\/h3>[\s\S]*?(?=<h3>Cautions<\/h3>)/;
@@ -476,22 +476,22 @@ Final Output Format:
             if (cautionsMatch) cautionsHTML = cautionsMatch[0].trim();
 
             analysisResults.innerHTML = `
-                    <div id="analysisResultsTop">
-                      <h3>Est. HelioViews Score: <b>${helioViewsScore.toFixed(1)}</b></h3>
-                      <div><strong>Base Solar Potential:</strong> ${solrad.toFixed(2)} kWh/m²/day</div>
-                      <div><strong>Climate Adjustment:</strong> ${climate}</div>
-                      <div><strong>Shade:</strong> ${shading}</div>
-                      <div><strong>Elevation Height:</strong> ${levelElevation}</div>
-                    </div>
-                    <div id="analysisColumns">
-                      <div class="analysis-col highlights-col">
-                        ${highlightsHTML}
-                      </div>
-                      <div class="analysis-col cautions-col">
-                        ${cautionsHTML}
-                      </div>
-                    </div>
-                `;
+            <div id="analysisResultsTop">
+              <h3>Est. HelioViews Score: <b>${helioViewsScore.toFixed(1)}</b></h3>
+              <div><strong>Base Solar Potential:</strong> ${solrad.toFixed(2)} kWh/m²/day</div>
+              <div><strong>Climate Adjustment:</strong> ${climate}</div>
+              <div><strong>Shade:</strong> ${shading}</div>
+              <div><strong>Elevation Height:</strong> ${levelElevation}</div>
+            </div>
+            <div id="analysisColumns">
+              <div class="analysis-col highlights-col">
+                ${highlightsHTML}
+              </div>
+              <div class="analysis-col cautions-col">
+                ${cautionsHTML}
+              </div>
+            </div>
+          `;
         }
 
         /*************************************************
@@ -645,16 +645,15 @@ Final Output Format:
             if (!b) return;
 
             if (b.isTileset) {
-                // Fly to the PeaSoup bounding sphere
+                // Fly to the PeaSoup tileset bounding sphere
                 if (buildingBoundingSphere) {
                     viewer.camera.flyToBoundingSphere(buildingBoundingSphere, { duration: 2 });
                 }
             } else {
-                // Approx bounding sphere for a box entity
+                // Approximate bounding sphere for an entity (using position and half the diagonal)
                 const position = Cesium.Cartesian3.fromDegrees(b.coordinates.lon, b.coordinates.lat, 0);
                 let radius = 50;
                 if (b.dimensions) {
-                    // half the diagonal of the box
                     const diag = Cesium.Cartesian3.magnitude(b.dimensions);
                     radius = diag / 2;
                 }
@@ -668,23 +667,30 @@ Final Output Format:
         updateBuildingDropdown();
 
         /*************************************************
-         * 10) Create Entities (Instead of Geometry Primitives)
+         * 10) Create Entities (Using the Entity API)
          *************************************************/
         function createBuildingEntities() {
             buildings.forEach(b => {
-                // If it's the PeaSoup tileset, skip entity creation
+                // Skip creating an entity for the tileset (PeaSoup ALL)
                 if (b.isTileset) return;
 
-                // Use the Entity API with a box, clamped to ground
+                // Create a position
+                const position = Cesium.Cartesian3.fromDegrees(b.coordinates.lon, b.coordinates.lat);
+                // Create a heading-pitch-roll with 45° (clockwise) heading, 0 pitch, 0 roll
+                const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(45), 0, 0);
+                const orientation = Cesium.Transforms.headingPitchRollQuaternion(position, hpr);
+
                 viewer.entities.add({
                     name: b.name,
-                    position: Cesium.Cartesian3.fromDegrees(b.coordinates.lon, b.coordinates.lat),
+                    position: position,
+                    orientation: orientation,
                     box: {
                         dimensions: b.dimensions,
                         material: Cesium.Color.fromCssColorString(b.color),
                         fill: true,
                         outline: true,
                         outlineColor: Cesium.Color.BLACK,
+                        shadows: Cesium.ShadowMode.ENABLED,
                         heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
                     }
                 });
@@ -697,7 +703,7 @@ Final Output Format:
         function computeCityWideBoundingSphereAndFly() {
             let cityBoundingSphere;
 
-            // Start with PeaSoup bounding sphere
+            // Start with PeaSoup tileset bounding sphere
             if (buildingBoundingSphere) {
                 cityBoundingSphere = buildingBoundingSphere.clone();
             }
@@ -722,7 +728,7 @@ Final Output Format:
                 }
             });
 
-            // Fly with a bird’s-eye pitch
+            // Fly to the city-wide bounding sphere with a bird’s-eye view (pitch -90°)
             if (cityBoundingSphere) {
                 viewer.camera.flyToBoundingSphere(cityBoundingSphere, {
                     offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-90), cityBoundingSphere.radius * 2),
