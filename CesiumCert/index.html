@@ -461,6 +461,14 @@
             "Birds_Eye": "N/A"
         };
 
+        // Adjustment for shading multipliers.
+        const SHADING_ADJUSTMENTS = {
+            "NONE": 1.0,
+            "LIGHT": 0.90,
+            "MEDIUM": 0.80,
+            "HEAVY": 0.50,
+        };
+
         /*************************************************
          * 6) Fly-To Functions & City-Wide View Calculation
          *************************************************/
@@ -698,14 +706,6 @@ Final Output Format:
                     </div>
                   `;
         }
-
-        // Adjustment for shading multipliers.
-        const SHADING_ADJUSTMENTS = {
-            "NONE": 1.0,
-            "LIGHT": 0.90,
-            "MEDIUM": 0.80,
-            "HEAVY": 0.50,
-        };
 
         /*************************************************
          * 9) Event Listeners
