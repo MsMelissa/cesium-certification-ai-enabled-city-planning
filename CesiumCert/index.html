@@ -454,13 +454,13 @@ TASK:
 Final Output Format:
 <h3>Highlights</h3>
 <ul>
-        <li>Bullet points…</li>
+            <li>Bullet points…</li>
 </ul>
 <h3>Cautions</h3>
 <ul>
-        <li>Bullet points…</li>
+            <li>Bullet points…</li>
 </ul>
-          `;
+              `;
 
             const llmText = await generateLLMText(summaryPrompt) || "";
             const highlightsRegex = /<h3>Highlights<\/h3>[\s\S]*?(?=<h3>Cautions<\/h3>)/;
@@ -476,22 +476,22 @@ Final Output Format:
             if (cautionsMatch) cautionsHTML = cautionsMatch[0].trim();
 
             analysisResults.innerHTML = `
-            <div id="analysisResultsTop">
-              <h3>Est. HelioViews Score: <b>${helioViewsScore.toFixed(1)}</b></h3>
-              <div><strong>Base Solar Potential:</strong> ${solrad.toFixed(2)} kWh/m²/day</div>
-              <div><strong>Climate Adjustment:</strong> ${climate}</div>
-              <div><strong>Shade:</strong> ${shading}</div>
-              <div><strong>Elevation Height:</strong> ${levelElevation}</div>
-            </div>
-            <div id="analysisColumns">
-              <div class="analysis-col highlights-col">
-                ${highlightsHTML}
-              </div>
-              <div class="analysis-col cautions-col">
-                ${cautionsHTML}
-              </div>
-            </div>
-          `;
+                <div id="analysisResultsTop">
+                  <h3>Est. HelioViews Score: <b>${helioViewsScore.toFixed(1)}</b></h3>
+                  <div><strong>Base Solar Potential:</strong> ${solrad.toFixed(2)} kWh/m²/day</div>
+                  <div><strong>Climate Adjustment:</strong> ${climate}</div>
+                  <div><strong>Shade:</strong> ${shading}</div>
+                  <div><strong>Elevation Height:</strong> ${levelElevation}</div>
+                </div>
+                <div id="analysisColumns">
+                  <div class="analysis-col highlights-col">
+                    ${highlightsHTML}
+                  </div>
+                  <div class="analysis-col cautions-col">
+                    ${cautionsHTML}
+                  </div>
+                </div>
+              `;
         }
 
         /*************************************************
@@ -522,11 +522,11 @@ Final Output Format:
          *************************************************/
         const buildings = [
             {
-                name: "PeaSoup",
+                name: "PeaSoup ALL",
                 status: "Conceptual Review",
                 color: "pink",
-                isTileset: true,
-                coordinates: { lon: -120.1918, lat: 34.61346 }
+                coordinates: { lon: -120.1918, lat: 34.61346 },
+                isTileset: true
             },
             {
                 name: "Hwy 246 Commercial Center",
@@ -595,7 +595,7 @@ Final Output Format:
                 name: "The Waypoint (Live Oaks Bowling)",
                 status: "Construction Plans Review",
                 color: "lightyellow",
-                dimensions: new Cesium.Cartesian3(61, 61, 17),
+                dimensions: new Cesium.Cartesian3(61, 61, 170),
                 coordinates: { lon: -120.1879, lat: 34.60831 }
             },
             {
@@ -631,12 +631,11 @@ Final Output Format:
             const filtered = status === "All"
                 ? buildings
                 : buildings.filter(b => b.status === status);
-            // Add each building to the dropdown
-            filteredBuildings.forEach(b => {
-                const option = document.createElement("option");
-                option.value = b.name;           // Must be exactly "PeaSoup"
-                option.textContent = b.name;     // So it displays "PeaSoup"
-                buildingSelect.appendChild(option);
+            filtered.forEach(b => {
+                const opt = document.createElement("option");
+                opt.value = b.name;
+                opt.textContent = b.name;
+                buildingSelect.appendChild(opt);
             });
         }
 
