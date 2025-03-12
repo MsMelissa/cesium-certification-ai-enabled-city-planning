@@ -522,11 +522,11 @@ Final Output Format:
          *************************************************/
         const buildings = [
             {
-                name: "PeaSoup ALL",
+                name: "PeaSoup",
                 status: "Conceptual Review",
                 color: "pink",
-                coordinates: { lon: -120.1918, lat: 34.61346 },
-                isTileset: true
+                isTileset: true,
+                coordinates: { lon: -120.1918, lat: 34.61346 }
             },
             {
                 name: "Hwy 246 Commercial Center",
@@ -641,7 +641,9 @@ Final Output Format:
 
         function flyToSelectedBuilding() {
             const selectedName = buildingSelect.value;
+            console.log("Selected building name:", selectedName);
             const b = buildings.find(x => x.name === selectedName);
+            console.log("Found building object:", b);
             if (!b) return;
 
             if (b.isTileset) {
