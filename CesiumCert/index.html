@@ -525,8 +525,8 @@ Final Output Format:
                 name: "PeaSoup",
                 status: "Conceptual Review",
                 color: "pink",
-                coordinates: { lon: -120.1918, lat: 34.61346 },
-                isTileset: true
+                isTileset: true,
+                coordinates: { lon: -120.1918, lat: 34.61346 }
             },
             {
                 name: "Hwy 246 Commercial Center",
@@ -631,11 +631,12 @@ Final Output Format:
             const filtered = status === "All"
                 ? buildings
                 : buildings.filter(b => b.status === status);
-            filtered.forEach(b => {
-                const opt = document.createElement("option");
-                opt.value = b.name;
-                opt.textContent = b.name;
-                buildingSelect.appendChild(opt);
+            // Add each building to the dropdown
+            filteredBuildings.forEach(b => {
+                const option = document.createElement("option");
+                option.value = b.name;           // Must be exactly "PeaSoup"
+                option.textContent = b.name;     // So it displays "PeaSoup"
+                buildingSelect.appendChild(option);
             });
         }
 
