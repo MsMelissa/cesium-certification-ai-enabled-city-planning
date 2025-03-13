@@ -595,7 +595,7 @@ Final Output Format:
                 name: "The Waypoint (Live Oaks Bowling)",
                 status: "Construction Plans Review",
                 color: "lightyellow",
-                dimensions: new Cesium.Cartesian3(61, 61, 170),
+                dimensions: new Cesium.Cartesian3(61, 61, 17),
                 coordinates: { lon: -120.1879, lat: 34.60831 }
             },
             {
@@ -627,6 +627,13 @@ Final Output Format:
         function updateBuildingDropdown() {
             const status = buildingStatusSelect.value;
             buildingSelect.innerHTML = "";
+
+            // Add a default blank option
+            const blankOption = document.createElement("option");
+            blankOption.value = "";
+            blankOption.textContent = "--- Select a Building ---";
+            buildingSelect.appendChild(blankOption);
+
             // Filter by status (or all if "All")
             const filtered = status === "All"
                 ? buildings
@@ -673,8 +680,13 @@ Final Output Format:
         }
 
         buildingStatusSelect.addEventListener("change", updateBuildingDropdown);
-        buildingSelect.addEventListener("change", flyToSelectedBuilding);
+        buildingSelect.addEventListener("change", () => {
+            if (buildingSelect.value !== "") {
+                flyToSelectedBuilding();
+            }
+        });
         updateBuildingDropdown();
+
 
         /*************************************************
          * 10) Create Entities (Using the Entity API)
@@ -687,7 +699,7 @@ Final Output Format:
                 // Create a position
                 const position = Cesium.Cartesian3.fromDegrees(b.coordinates.lon, b.coordinates.lat);
                 // Create a heading-pitch-roll with 45° (clockwise) heading, 0 pitch, 0 roll
-                const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(45), 0, 0);
+                const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(75), 0, 0);
                 const orientation = Cesium.Transforms.headingPitchRollQuaternion(position, hpr);
 
                 viewer.entities.add({
