@@ -284,93 +284,52 @@
             "BIRDSEYE": Cesium.Math.toRadians(0)
         };
 
-        async function flyToOrientation() {
-            const selectedName = buildingSelect.value;
-            const b = buildings.find(x => x.name === selectedName);
-            if (!b) return;
+        async function flyToOrientationAndLevel() {
+            // Determine orientation settings:
+            const orientation = orientationSelect.value;
+            const heading = ORIENTATION_HEADING[orientation] || 0;
+            // For non-BIRDSEYE, use a horizontal view (pitch = 0) like in your older model.
+            let pitch = orientation === "BIRDSEYE" ? Cesium.Math.toRadians(-90) : 0;
 
-            // Determine orientation settings
-            const orientationValue = orientationSelect.value;
-            let heading = ORIENTATION_HEADING[orientationValue] || 0;
-            let pitch = Cesium.Math.toRadians(-15);
-            if (orientationValue === "BIRDSEYE") {
-                pitch = Cesium.Math.toRadians(-90);
-            }
-
-            if (b.isTileset) {
-                // For tilesets (e.g., PeaSoup)
-                if (buildingBoundingSphere) {
-                    const rangeFactor = 1.4;
-                    const range = buildingBoundingSphere.radius * rangeFactor;
-                    viewer.camera.flyToBoundingSphere(buildingBoundingSphere, {
-                        offset: new Cesium.HeadingPitchRange(heading, pitch, range),
-                        duration: 2
-                    });
-                }
-            } else {
-                // For regular building entities
-                const pos = Cesium.Cartesian3.fromDegrees(b.coordinates.lon, b.coordinates.lat, 0);
-                let radius = 50;
-                if (b.dimensions) {
-                    const diag = Cesium.Cartesian3.magnitude(b.dimensions);
-                    radius = diag / 2;
-                }
-                const sphere = new Cesium.BoundingSphere(pos, radius);
-                viewer.camera.flyToBoundingSphere(sphere, {
-                    offset: new Cesium.HeadingPitchRange(heading, pitch, radius * 3),
-                    duration: 2
-                });
-            }
-        }
-        async function updateBuildingLevelView() {
-            const selectedName = buildingSelect.value;
-            const b = buildings.find(x => x.name === selectedName);
-            if (!b) return;
-
-            // Preserve current orientation settings:
-            const orientationValue = orientationSelect.value;
-            let heading = ORIENTATION_HEADING[orientationValue] || 0;
-            let pitch = Cesium.Math.toRadians(-15);
-            if (orientationValue === "BIRDSEYE") {
-                pitch = Cesium.Math.toRadians(-90);
-            }
-
-            // Compute the altitude offset based on the selected building level.
+            // Get the altitude offset based on the selected building level.
             const buildingLevel = buildingLevelSelect.value;
             const levelFeet = LEVEL_ALTITUDES_FEET[buildingLevel] || 0;
-            const levelOffsetMeters = feetToMeters(levelFeet);
+            const levelMeters = feetToMeters(levelFeet);
 
-            if (b.isTileset) {
-                // For tilesets, adjust the bounding sphere's center altitude.
-                if (buildingBoundingSphere) {
-                    let tempSphere = Cesium.BoundingSphere.clone(buildingBoundingSphere);
-                    const cartoCenter = Cesium.Ellipsoid.WGS84.cartesianToCartographic(tempSphere.center);
-                    cartoCenter.height += levelOffsetMeters;
-                    tempSphere.center = Cesium.Ellipsoid.WGS84.cartographicToCartesian(cartoCenter);
-                    const rangeFactor = 1.4;
-                    const range = tempSphere.radius * rangeFactor;
-                    viewer.camera.flyToBoundingSphere(tempSphere, {
-                        offset: new Cesium.HeadingPitchRange(heading, pitch, range),
-                        duration: 2
-                    });
-                }
-            } else {
-                // For entity boxes, adjust the building's position altitude.
+            let sphere, range;
+            const selectedName = buildingSelect.value;
+            const b = buildings.find(x => x.name === selectedName);
+
+            if (b && !b.isTileset) {
+                // For regular building entities, compute a bounding sphere.
                 let pos = Cesium.Cartesian3.fromDegrees(b.coordinates.lon, b.coordinates.lat, 0);
                 let carto = Cesium.Ellipsoid.WGS84.cartesianToCartographic(pos);
-                carto.height += levelOffsetMeters;
+                carto.height += levelMeters; // add the altitude offset
                 pos = Cesium.Ellipsoid.WGS84.cartographicToCartesian(carto);
+
+                // Determine sphere radius (using dimensions if available).
                 let radius = 50;
                 if (b.dimensions) {
                     const diag = Cesium.Cartesian3.magnitude(b.dimensions);
                     radius = diag / 2;
                 }
-                const sphere = new Cesium.BoundingSphere(pos, radius);
-                viewer.camera.flyToBoundingSphere(sphere, {
-                    offset: new Cesium.HeadingPitchRange(heading, pitch, radius * 3),
-                    duration: 2
-                });
+                sphere = new Cesium.BoundingSphere(pos, radius);
+                range = radius * 3;
+            } else {
+                // For tileset buildings (PeaSoup), use the buildingBoundingSphere.
+                if (!buildingBoundingSphere) return;
+                sphere = Cesium.BoundingSphere.clone(buildingBoundingSphere);
+                const cartoCenter = Cesium.Ellipsoid.WGS84.cartesianToCartographic(sphere.center);
+                cartoCenter.height += levelMeters;
+                sphere.center = Cesium.Ellipsoid.WGS84.cartographicToCartesian(cartoCenter);
+                range = sphere.radius * 1.4;
             }
+
+            // Fly the camera using the computed bounding sphere.
+            viewer.camera.flyToBoundingSphere(sphere, {
+                offset: new Cesium.HeadingPitchRange(heading, pitch, range),
+                duration: 2
+            });
         }
 
         /*************************************************
@@ -577,14 +536,14 @@ Final Output Format:
 
         orientationSelect.addEventListener("change", async () => {
             if (buildingSelect.value !== "") {
-                await flyToOrientation();
+                await flyToOrientationAndLevel();
             }
             updateAnalysisPanel();
         });
 
         buildingLevelSelect.addEventListener("change", async () => {
             if (buildingSelect.value !== "") {
-                await updateBuildingLevelView();
+                await flyToOrientationAndLevel();
             }
             updateAnalysisPanel();
         });
