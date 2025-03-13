@@ -148,12 +148,14 @@
         <div id="orientationContainer">
             <strong>Select Orientation:</strong><br />
             <select id="orientationSelect">
+                <option value="">--- Select Orientation ---</option>
                 <option value="NORTH">NORTH</option>
                 <option value="SOUTH">SOUTH</option>
                 <option value="EAST">EAST</option>
                 <option value="WEST">WEST</option>
                 <option value="BIRDSEYE">BIRDSEYE</option>
             </select>
+
         </div>
 
         <!-- Building Level Dropdown -->
@@ -509,7 +511,9 @@ Final Output Format:
         });
         timeSlider.addEventListener("input", updateAnalysisPanel);
         orientationSelect.addEventListener("change", async () => {
-            await flyToOrientationAndLevel();
+            if (buildingSelect.value !== "") {
+                await flyToSelectedBuilding();
+            }
             updateAnalysisPanel();
         });
         buildingLevelSelect.addEventListener("change", async () => {
@@ -653,14 +657,31 @@ Final Output Format:
             console.log("Found building object:", b);
             if (!b) return;
 
+            // Get the current orientation selection
+            let orientationValue = orientationSelect.value; // e.g., "NORTH", "SOUTH", etc.
+            let heading = 0;
+            if (orientationValue && ORIENTATION_HEADING.hasOwnProperty(orientationValue)) {
+                heading = ORIENTATION_HEADING[orientationValue];
+            }
+
+            // Set pitch: use -90° for "BIRDSEYE" or default to a slight downward tilt (e.g. -15°)
+            let pitch = Cesium.Math.toRadians(-15);
+            if (orientationValue === "BIRDSEYE") {
+                pitch = Cesium.Math.toRadians(-90);
+            }
+
             if (b.isTileset) {
-            console.log("PeaSoup bounding sphere:", buildingBoundingSphere);
-                // Fly to the PeaSoup tileset bounding sphere
+                // For tileset (PeaSoup), fly using the buildingBoundingSphere with the orientation offset.
                 if (buildingBoundingSphere) {
-                    viewer.camera.flyToBoundingSphere(buildingBoundingSphere, { duration: 2 });
+                    const rangeFactor = 1.4;
+                    const range = buildingBoundingSphere.radius * rangeFactor;
+                    viewer.camera.flyToBoundingSphere(buildingBoundingSphere, {
+                        offset: new Cesium.HeadingPitchRange(heading, pitch, range),
+                        duration: 2
+                    });
                 }
             } else {
-                // Approximate bounding sphere for an entity (using position and half the diagonal)
+                // For entities, create an approximate bounding sphere based on position and dimensions.
                 const position = Cesium.Cartesian3.fromDegrees(b.coordinates.lon, b.coordinates.lat, 0);
                 let radius = 50;
                 if (b.dimensions) {
@@ -670,14 +691,11 @@ Final Output Format:
                 const sphere = new Cesium.BoundingSphere(position, radius);
                 viewer.camera.flyToBoundingSphere(sphere, {
                     duration: 2,
-                    offset: new Cesium.HeadingPitchRange(
-                        0,                             // heading
-                        Cesium.Math.toRadians(-15),    // pitch (tilt camera down ~15°)
-                        radius * 3                     // how far back to place the camera
-                    )
+                    offset: new Cesium.HeadingPitchRange(heading, pitch, radius * 3)
                 });
             }
         }
+
 
         buildingStatusSelect.addEventListener("change", updateBuildingDropdown);
         buildingSelect.addEventListener("change", () => {
@@ -699,7 +717,7 @@ Final Output Format:
                 // Create a position
                 const position = Cesium.Cartesian3.fromDegrees(b.coordinates.lon, b.coordinates.lat);
                 // Create a heading-pitch-roll with 45° (clockwise) heading, 0 pitch, 0 roll
-                const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(75), 0, 0);
+                const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(0), 0, 0);
                 const orientation = Cesium.Transforms.headingPitchRollQuaternion(position, hpr);
 
                 viewer.entities.add({
