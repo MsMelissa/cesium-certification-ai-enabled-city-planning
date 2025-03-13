@@ -544,10 +544,11 @@ Final Output Format:
         timeSlider.addEventListener("input", updateAnalysisPanel);
         orientationSelect.addEventListener("change", async () => {
             if (buildingSelect.value !== "") {
-                await flyToSelectedBuilding();
+                await flyToOrientationAndLevel();
             }
             updateAnalysisPanel();
         });
+
         buildingLevelSelect.addEventListener("change", async () => {
             if (buildingLevelSelect.value !== "") {
                 await flyToOrientationAndLevel();
