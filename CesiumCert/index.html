@@ -647,6 +647,7 @@ Final Output Format:
             if (!b) return;
 
             if (b.isTileset) {
+            console.log("PeaSoup bounding sphere:", buildingBoundingSphere);
                 // Fly to the PeaSoup tileset bounding sphere
                 if (buildingBoundingSphere) {
                     viewer.camera.flyToBoundingSphere(buildingBoundingSphere, { duration: 2 });
