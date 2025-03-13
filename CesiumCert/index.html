@@ -458,9 +458,24 @@
             solrad *= SHADING_ADJUSTMENTS[shading] * LEVEL_MULTIPLIERS[buildingLevel];
             const helioViewsScore = solrad * 2;
 
+            let address;
+            // If "All" is selected or no specific building is chosen, use the default address.
+            if (buildingStatusSelect.value === "All" || buildingSelect.value === "") {
+                address = "Buellton, CA (lat: 34.61346, lon: -120.1918)";
+            } else {
+                // Find the selected building object from the buildings array.
+                const selectedBuilding = buildings.find(b => b.name === buildingSelect.value);
+                if (selectedBuilding) {
+                    address = `${selectedBuilding.name} (lat: ${selectedBuilding.coordinates.lat}, lon: ${selectedBuilding.coordinates.lon})`;
+                } else {
+                    // Fallback in case the building is not found.
+                    address = "Buellton, CA (lat: 34.61346, lon: -120.1918)";
+                }
+            }
+
             const summaryPrompt = `
 PROPERTY DETAILS:
-• Address: Buellton, CA (lat: 34.61346, lon: -120.1918)
+• Address: ${address}
 • Orientation: ${orientation}
 • Season: ${season}
 • Time: ${hour}:00 PST
@@ -472,7 +487,7 @@ PROPERTY DETAILS:
 • Est. HelioViews Score: ${helioViewsScore.toFixed(1)}
 
 TASK:
-1. Provide a "City Planner’s Highlights" section that outlines the key strengths of this property’s solar potential.
+1. Provide a "City Planner’s Highlights" section that outlines the key strengths of this property’s solar and permaculture potential.
 2. Provide a "City Planner’s Cautions" section that identifies potential concerns or areas for further study.
 
 Final Output Format:
