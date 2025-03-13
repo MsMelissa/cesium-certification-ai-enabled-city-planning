@@ -285,31 +285,62 @@
         };
 
         async function flyToOrientationAndLevel() {
-            if (!buildingBoundingSphere) return;
+            // 1) Identify which building is selected
+            const selectedName = buildingSelect.value;
+            if (!selectedName) return;  // no building chosen yet
+            const b = buildings.find(x => x.name === selectedName);
+            if (!b) return;
 
+            // 2) Determine orientation heading and pitch
             const orientation = orientationSelect.value;
-            const buildingLevel = buildingLevelSelect.value;
-            const tempSphere = Cesium.BoundingSphere.clone(buildingBoundingSphere);
-
-            // Adjust altitude of bounding sphere center
-            const cartoCenter = Cesium.Ellipsoid.WGS84.cartesianToCartographic(tempSphere.center);
-            const levelFeet = LEVEL_ALTITUDES_FEET[buildingLevel] || 0;
-            cartoCenter.height += feetToMeters(levelFeet);
-            tempSphere.center = Cesium.Ellipsoid.WGS84.cartographicToCartesian(cartoCenter);
-
-            let pitch = 0;
+            let heading = ORIENTATION_HEADING[orientation] || 0;
+            let pitch = Cesium.Math.toRadians(-15);  // default slight downward
             if (orientation === "BIRDSEYE") {
                 pitch = Cesium.Math.toRadians(-90);
             }
-            const heading = ORIENTATION_HEADING[orientation] || 0;
-            const rangeFactor = 1.4;
-            const range = tempSphere.radius * rangeFactor;
 
-            viewer.camera.flyToBoundingSphere(tempSphere, {
-                offset: new Cesium.HeadingPitchRange(heading, pitch, range),
-                duration: 2
-            });
+            // 3) Determine building level altitude offset
+            const buildingLevel = buildingLevelSelect.value;
+            const levelFeet = LEVEL_ALTITUDES_FEET[buildingLevel] || 0;
+            const offsetMeters = feetToMeters(levelFeet);
+
+            // 4) Fly to EITHER the PeaSoup tileset bounding sphere OR a custom entity bounding sphere
+            if (b.isTileset) {
+                // Tileset (PeaSoup) approach
+                if (!buildingBoundingSphere) return;
+                const tempSphere = Cesium.BoundingSphere.clone(buildingBoundingSphere);
+                const cartoCenter = Cesium.Ellipsoid.WGS84.cartesianToCartographic(tempSphere.center);
+                cartoCenter.height += offsetMeters;
+                tempSphere.center = Cesium.Ellipsoid.WGS84.cartographicToCartesian(cartoCenter);
+
+                const rangeFactor = 1.4;
+                const range = tempSphere.radius * rangeFactor;
+                viewer.camera.flyToBoundingSphere(tempSphere, {
+                    offset: new Cesium.HeadingPitchRange(heading, pitch, range),
+                    duration: 2
+                });
+            } else {
+                // Regular entity approach
+                let pos = Cesium.Cartesian3.fromDegrees(b.coordinates.lon, b.coordinates.lat, 0);
+                let carto = Cesium.Ellipsoid.WGS84.cartesianToCartographic(pos);
+                carto.height += offsetMeters;
+                pos = Cesium.Ellipsoid.WGS84.cartographicToCartesian(carto);
+
+                // Approximate bounding sphere
+                let radius = 50;
+                if (b.dimensions) {
+                    const diag = Cesium.Cartesian3.magnitude(b.dimensions);
+                    radius = diag / 2;
+                }
+                const sphere = new Cesium.BoundingSphere(pos, radius);
+
+                viewer.camera.flyToBoundingSphere(sphere, {
+                    duration: 2,
+                    offset: new Cesium.HeadingPitchRange(heading, pitch, radius * 3)
+                });
+            }
         }
+
 
         /*************************************************
          * 5) Shading & Multipliers (Step 1 changes)
