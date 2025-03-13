@@ -162,6 +162,7 @@
         <div id="buildingLevelContainer">
             <strong>Select Building Level:</strong><br />
             <select id="buildingLevelSelect">
+                <option value="">--- Select a Level ---</option>
                 <option value="Ground">Ground</option>
                 <option value="2nd Story">2nd Story</option>
                 <option value="4th Floor">4th Floor</option>
@@ -517,7 +518,9 @@ Final Output Format:
             updateAnalysisPanel();
         });
         buildingLevelSelect.addEventListener("change", async () => {
-            await flyToOrientationAndLevel();
+            if (buildingLevelSelect.value !== "") {
+                await flyToOrientationAndLevel();
+            }
             updateAnalysisPanel();
         });
 
